@@ -23,7 +23,7 @@ It gives you one focused place to open codebases, switch worktrees, keep termina
 ### Homebrew
 
 ```bash
-brew install --cask everettjf/tap/liney
+brew update && brew install --cask everettjf/tap/liney
 ```
 
 ### Direct Download
