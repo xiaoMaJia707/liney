@@ -20,6 +20,7 @@ final class IslandNotificationState: ObservableObject {
     @Published var items: [IslandNotificationItem] = []
     @Published var isExpanded: Bool = false
     @Published var selectedTab: IslandTab = .workspaces
+    @Published var currentGroupID: UUID? = nil
 
     var latestItem: IslandNotificationItem? {
         items.last

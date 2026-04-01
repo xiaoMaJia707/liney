@@ -96,25 +96,77 @@ struct IslandExpandedView: View {
     @ViewBuilder
     private var workspacesTabContent: some View {
         if let store = controller.workspaceStore {
-            ScrollView {
-                LazyVStack(spacing: 2) {
-                    ForEach(store.workspaces) { workspace in
-                        IslandWorkspaceRow(
-                            workspace: workspace,
-                            isSelected: workspace.id == store.selectedWorkspaceID,
-                            controller: controller
-                        )
-                    }
+            VStack(spacing: 0) {
+                if state.currentGroupID != nil {
+                    islandBackButton
+                    Divider().background(.white.opacity(0.06))
                 }
-                .padding(.vertical, 6)
-                .padding(.horizontal, 8)
+
+                ScrollView {
+                    LazyVStack(spacing: 2) {
+                        if let groupID = state.currentGroupID,
+                           let group = store.appSettings.workspaceGroups.first(where: { $0.id == groupID }) {
+                            let groupWorkspaces = group.workspaceIDs.compactMap { wid in
+                                store.workspaces.first(where: { $0.id == wid })
+                            }
+                            ForEach(groupWorkspaces) { workspace in
+                                IslandWorkspaceRow(
+                                    workspace: workspace,
+                                    isSelected: workspace.id == store.selectedWorkspaceID,
+                                    controller: controller
+                                )
+                            }
+                        } else {
+                            let groups = store.appSettings.workspaceGroups
+                            let groupedIDs = Set(groups.flatMap(\.workspaceIDs))
+
+                            ForEach(groups) { group in
+                                IslandGroupRow(group: group, store: store, state: state)
+                            }
+
+                            let ungrouped = store.workspaces.filter { !groupedIDs.contains($0.id) }
+                            ForEach(ungrouped) { workspace in
+                                IslandWorkspaceRow(
+                                    workspace: workspace,
+                                    isSelected: workspace.id == store.selectedWorkspaceID,
+                                    controller: controller
+                                )
+                            }
+                        }
+                    }
+                    .padding(.vertical, 6)
+                    .padding(.horizontal, 8)
+                }
             }
+            .animation(.spring(response: 0.3, dampingFraction: 0.85), value: state.currentGroupID)
         } else {
             Text("No workspaces")
                 .font(.system(size: 13))
                 .foregroundStyle(.white.opacity(0.4))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+
+    @ViewBuilder
+    private var islandBackButton: some View {
+        Button {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                state.currentGroupID = nil
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 11, weight: .semibold))
+                Text("All Workspaces")
+                    .font(.system(size: 12, weight: .medium))
+                Spacer()
+            }
+            .foregroundStyle(.white.opacity(0.6))
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Notifications Tab
@@ -146,6 +198,73 @@ struct IslandExpandedView: View {
                 .padding(.horizontal, 8)
             }
         }
+    }
+}
+
+// MARK: - Group Row
+
+private struct IslandGroupRow: View {
+    let group: WorkspaceGroup
+    let store: WorkspaceStore
+    @ObservedObject var state: IslandNotificationState
+
+    private var memberCount: Int {
+        group.workspaceIDs.filter { wid in
+            store.workspaces.contains(where: { $0.id == wid })
+        }.count
+    }
+
+    private var activeCount: Int {
+        group.workspaceIDs.compactMap { wid in
+            store.workspaces.first(where: { $0.id == wid })
+        }.reduce(0) { $0 + $1.sessionController.activeSessionCount }
+    }
+
+    var body: some View {
+        Button {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                state.currentGroupID = group.id
+            }
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: group.icon.symbolName)
+                    .font(.system(size: 14))
+                    .foregroundStyle(group.icon.palette.descriptor.foreground)
+                    .frame(width: 20)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(group.name)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+
+                    HStack(spacing: 6) {
+                        Text("\(memberCount) workspaces")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.white.opacity(0.45))
+                        if activeCount > 0 {
+                            Label("\(activeCount)", systemImage: "terminal")
+                                .font(.system(size: 10))
+                                .foregroundStyle(.green.opacity(0.8))
+                        }
+                    }
+                }
+
+                Spacer(minLength: 4)
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.3))
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(.white.opacity(0.04))
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }
 

@@ -56,6 +56,7 @@ final class IslandPanelController: NSObject, NSWindowDelegate {
     func hide() {
         autoDismissTask?.cancel()
         state.isExpanded = false
+        state.currentGroupID = nil
         panel?.orderOut(nil)
     }
 
@@ -63,6 +64,7 @@ final class IslandPanelController: NSObject, NSWindowDelegate {
         if panel?.isVisible == true {
             if state.isExpanded {
                 state.isExpanded = false
+                state.currentGroupID = nil
                 repositionPanel()
             } else {
                 hide()
