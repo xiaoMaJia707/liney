@@ -665,6 +665,14 @@ private final class LineyGhosttySurfaceView: NSView {
         let scale = window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2
         ghostty_surface_set_content_scale(surface, scale, scale)
 
+        // Keep the Core Animation layer's contentsScale in sync so that
+        // CA correctly interprets the Metal-rendered texture's pixel density.
+        // Without this, moving from Retina (2x) to a 1x display causes CA
+        // to double-scale the already-correct 1x render output.
+        if let layer = self.layer {
+            layer.contentsScale = scale
+        }
+
         let backingBounds = convertToBacking(bounds)
         let width = max(Int(backingBounds.width.rounded()), 1)
         let height = max(Int(backingBounds.height.rounded()), 1)
