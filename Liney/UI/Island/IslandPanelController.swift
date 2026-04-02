@@ -106,7 +106,7 @@ final class IslandPanelController: NSObject, NSWindowDelegate {
             backing: .buffered,
             defer: false
         )
-        panel.level = .statusBar
+        panel.level = NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue + 8)
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         panel.isMovableByWindowBackground = false
         panel.backgroundColor = .clear
@@ -160,9 +160,11 @@ final class IslandPanelController: NSObject, NSWindowDelegate {
             size = NSSize(width: collapsedWidth(), height: collapsedHeight)
         }
 
-        // Always center horizontally and pin to the very top of the screen
+        // Center horizontally and push top edge above screen so the rounded corners
+        // blend into the top edge, similar to a real Dynamic Island.
+        let topOverlap: CGFloat = expanded ? 0 : 10
         let x = screenFrame.midX - size.width / 2
-        let y = screenFrame.maxY - size.height
+        let y = screenFrame.maxY - size.height + topOverlap
 
         return NSRect(origin: NSPoint(x: x, y: y), size: size)
     }
