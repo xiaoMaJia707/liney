@@ -61,7 +61,7 @@ enum WorkspaceEvent {
     case autoRefreshTick
     case workspaceWatchTriggered(UUID)
     case gitHubIntegrationStateUpdated(GitHubIntegrationState)
-    case statusMessage(String, WorkspaceStatusTone, deliverSystemNotification: Bool)
+    case statusMessage(String, WorkspaceStatusTone, deliverSystemNotification: Bool, workspaceID: UUID? = nil, worktreePath: String? = nil)
 }
 
 enum CommandPaletteGroup: String, CaseIterable, Hashable, Identifiable {

@@ -59,7 +59,7 @@ final class AppUpdaterController {
         delegate.updateChannel = updateChannel
         updater.automaticallyChecksForUpdates = automaticallyChecks
         updater.automaticallyDownloadsUpdates = automaticallyDownloads
-        updater.updateCheckInterval = updateChannel == .preview ? 900 : 3600
+        updater.updateCheckInterval = updateChannel == .preview ? 21600 : 86400
 
         if checkInBackground, automaticallyChecks {
             updater.checkForUpdatesInBackground()

@@ -75,6 +75,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 Task { @MainActor in
                     self.applicationMenuController.applySettings(settings)
                     self.desktopApplication?.updateHotKeyWindowSettings(settings)
+                    if settings.dynamicIslandEnabled {
+                        IslandPanelController.shared.workspaceStore = self.desktopApplication?.activeWorkspaceStore
+                        IslandPanelController.shared.show()
+                    } else {
+                        IslandPanelController.shared.hide()
+                    }
                 }
             }
             localizationObserver = NotificationCenter.default.addObserver(
@@ -87,10 +93,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     self.refreshMainMenu()
                 }
             }
+            WorkspaceNotificationCenter.shared.onNotificationTapped = { [weak desktopApplication] workspaceID, worktreePath in
+                desktopApplication?.navigateToWorkspace(id: workspaceID, worktreePath: worktreePath)
+            }
             desktopApplication.launch()
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
                 self.refreshMainMenu()
+                if let store = self.desktopApplication?.activeWorkspaceStore {
+                    IslandPanelController.shared.workspaceStore = store
+                    if store.appSettings.dynamicIslandEnabled {
+                        IslandPanelController.shared.show()
+                    }
+                }
             }
         }
     }

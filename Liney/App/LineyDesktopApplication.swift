@@ -140,6 +140,20 @@ public final class LineyDesktopApplication: NSObject {
         }
     }
 
+    public func navigateToWorkspace(id workspaceID: UUID, worktreePath: String? = nil) {
+        for context in windowContexts {
+            guard let workspace = context.store.workspaces.first(where: { $0.id == workspaceID }) else {
+                continue
+            }
+            context.present(ignoringOtherApps: true)
+            context.store.selectWorkspace(workspace)
+            if let worktreePath, workspace.activeWorktreePath != worktreePath {
+                workspace.switchToWorktree(path: worktreePath, restartRunning: false)
+            }
+            return
+        }
+    }
+
     public func createNewWindow() {
         let context = makeWindowContext(
             persistsWorkspaceState: windowContexts.isEmpty,
@@ -348,6 +362,10 @@ public final class LineyDesktopApplication: NSObject {
             return context
         }
         return primaryWindowContext ?? windowContexts.first
+    }
+
+    var activeWorkspaceStore: WorkspaceStore? {
+        activeWindowContext?.store ?? primaryWindowContext?.store
     }
 
     private var activeStore: WorkspaceStore? {
