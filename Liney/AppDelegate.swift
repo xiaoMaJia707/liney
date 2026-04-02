@@ -96,6 +96,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             WorkspaceNotificationCenter.shared.onNotificationTapped = { [weak desktopApplication] workspaceID, worktreePath in
                 desktopApplication?.navigateToWorkspace(id: workspaceID, worktreePath: worktreePath)
             }
+            WorkspaceNotificationCenter.shared.onNotificationTappedFromSystem = {
+                let island = IslandPanelController.shared
+                let state = island.state
+                state.selectedTab = .notifications
+                state.isExpanded = true
+                island.show()
+                island.repositionPanel()
+            }
             desktopApplication.launch()
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
