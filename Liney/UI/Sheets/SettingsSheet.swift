@@ -633,8 +633,6 @@ struct SettingsSheet: View {
                             .padding(.vertical, 2)
                             .background(RoundedRectangle(cornerRadius: 4).fill(.orange))
                     }
-                    Toggle(localized("settings.dynamicIsland.persistent.toggle"), isOn: $appSettings.dynamicIslandPersistent)
-                        .disabled(!appSettings.dynamicIslandEnabled)
                     Text(localized("settings.dynamicIsland.enable.description"))
                         .font(.callout)
                         .foregroundStyle(.secondary)
