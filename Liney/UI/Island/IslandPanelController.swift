@@ -18,6 +18,7 @@ final class IslandPanelController: NSObject, NSWindowDelegate {
     private var panel: NSPanel?
     private var localEventMonitor: Any?
     private var mouseEventMonitor: Any?
+    private var localMouseMonitor: Any?
     private var screenObserver: NSObjectProtocol?
     private var autoDismissTask: Task<Void, Never>?
     private var collapseTask: Task<Void, Never>?
@@ -158,24 +159,44 @@ final class IslandPanelController: NSObject, NSWindowDelegate {
     }
 
     private func installMouseTracking() {
-        mouseEventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved, .leftMouseDown]) { [weak self] event in
+        let handler: (NSEvent) -> Void = { [weak self] _ in
             Task { @MainActor [weak self] in
-                guard let self, let panel = self.panel, panel.isVisible else { return }
-                let mouseLocation = NSEvent.mouseLocation
-                let panelFrame = panel.frame
-                let expandedHitArea = panelFrame.insetBy(dx: -20, dy: -20)
+                self?.checkMousePosition()
+            }
+        }
+        mouseEventMonitor = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved, handler: handler)
+        // Also track when our app is in foreground
+        localMouseMonitor = NSEvent.addLocalMonitorForEvents(matching: .mouseMoved) { [weak self] event in
+            Task { @MainActor [weak self] in
+                self?.checkMousePosition()
+            }
+            return event
+        }
+    }
 
-                if expandedHitArea.contains(mouseLocation) {
-                    self.collapseTask?.cancel()
-                } else if self.state.isExpanded {
-                    self.collapseTask?.cancel()
-                    self.collapseTask = Task { @MainActor in
-                        try? await Task.sleep(nanoseconds: 600_000_000)
-                        guard !Task.isCancelled else { return }
-                        self.state.isExpanded = false
-                        self.state.currentGroupID = nil
-                        self.repositionPanel()
-                    }
+    private func checkMousePosition() {
+        guard let panel, panel.isVisible, state.isExpanded else {
+            collapseTask?.cancel()
+            return
+        }
+        let mouseLocation = NSEvent.mouseLocation
+        let hitArea = panel.frame.insetBy(dx: -20, dy: -20)
+
+        if hitArea.contains(mouseLocation) {
+            collapseTask?.cancel()
+        } else {
+            guard collapseTask == nil else { return }
+            collapseTask = Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 600_000_000)
+                guard !Task.isCancelled else { return }
+                self.state.isExpanded = false
+                self.state.currentGroupID = nil
+                self.repositionPanel()
+                self.collapseTask = nil
+
+                // If not persistent, also hide the whole panel
+                if let store = self.workspaceStore, !store.appSettings.dynamicIslandPersistent {
+                    self.scheduleAutoDismiss()
                 }
             }
         }
@@ -225,6 +246,10 @@ final class IslandPanelController: NSObject, NSWindowDelegate {
         if let mouseEventMonitor {
             NSEvent.removeMonitor(mouseEventMonitor)
             self.mouseEventMonitor = nil
+        }
+        if let localMouseMonitor {
+            NSEvent.removeMonitor(localMouseMonitor)
+            self.localMouseMonitor = nil
         }
     }
 }
