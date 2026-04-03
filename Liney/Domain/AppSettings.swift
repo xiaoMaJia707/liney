@@ -262,6 +262,7 @@ struct AppSettings: Codable, Hashable {
     var systemNotificationsEnabled: Bool
     var dynamicIslandEnabled: Bool
     var dynamicIslandPersistent: Bool
+    var dynamicIslandPixelAnimation: IslandPixelAnimationStyle
     var showArchivedWorkspaces: Bool
     var uiScale: Double
     var terminalFontFamily: String?
@@ -302,6 +303,7 @@ struct AppSettings: Codable, Hashable {
         systemNotificationsEnabled: Bool = true,
         dynamicIslandEnabled: Bool = false,
         dynamicIslandPersistent: Bool = true,
+        dynamicIslandPixelAnimation: IslandPixelAnimationStyle = .random,
         showArchivedWorkspaces: Bool = false,
         uiScale: Double = 1,
         terminalFontFamily: String? = nil,
@@ -345,6 +347,7 @@ struct AppSettings: Codable, Hashable {
         self.systemNotificationsEnabled = systemNotificationsEnabled
         self.dynamicIslandEnabled = dynamicIslandEnabled
         self.dynamicIslandPersistent = dynamicIslandPersistent
+        self.dynamicIslandPixelAnimation = dynamicIslandPixelAnimation
         self.showArchivedWorkspaces = showArchivedWorkspaces
         self.uiScale = min(max(uiScale, 0.85), 1.5)
         self.terminalFontFamily = terminalFontFamily?
@@ -407,6 +410,7 @@ extension AppSettings {
         case systemNotificationsEnabled
         case dynamicIslandEnabled
         case dynamicIslandPersistent
+        case dynamicIslandPixelAnimation
         case showArchivedWorkspaces
         case uiScale
         case terminalFontFamily
@@ -458,6 +462,7 @@ extension AppSettings {
             systemNotificationsEnabled: try container.decodeIfPresent(Bool.self, forKey: .systemNotificationsEnabled) ?? true,
             dynamicIslandEnabled: try container.decodeIfPresent(Bool.self, forKey: .dynamicIslandEnabled) ?? false,
             dynamicIslandPersistent: try container.decodeIfPresent(Bool.self, forKey: .dynamicIslandPersistent) ?? true,
+            dynamicIslandPixelAnimation: try container.decodeIfPresent(IslandPixelAnimationStyle.self, forKey: .dynamicIslandPixelAnimation) ?? .random,
             showArchivedWorkspaces: try container.decodeIfPresent(Bool.self, forKey: .showArchivedWorkspaces) ?? false,
             uiScale: try container.decodeIfPresent(Double.self, forKey: .uiScale) ?? 1,
             terminalFontFamily: try container.decodeIfPresent(String.self, forKey: .terminalFontFamily),

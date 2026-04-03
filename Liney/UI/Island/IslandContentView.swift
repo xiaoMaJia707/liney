@@ -17,7 +17,10 @@ struct IslandContentView: View {
                 IslandExpandedView(state: state, controller: controller)
                     .transition(.opacity.combined(with: .scale(scale: 0.95, anchor: .top)))
             } else {
-                IslandCollapsedView(state: state)
+                IslandCollapsedView(
+                    state: state,
+                    pixelAnimationStyle: controller.workspaceStore?.appSettings.dynamicIslandPixelAnimation ?? .random
+                )
                     .transition(.opacity)
             }
         }

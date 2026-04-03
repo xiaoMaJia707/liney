@@ -9,6 +9,7 @@ import SwiftUI
 
 struct IslandCollapsedView: View {
     @ObservedObject var state: IslandNotificationState
+    var pixelAnimationStyle: IslandPixelAnimationStyle = .random
 
     var body: some View {
         HStack(spacing: 10) {
@@ -39,11 +40,19 @@ struct IslandCollapsedView: View {
                     .font(.system(size: 13))
                     .foregroundStyle(.white.opacity(0.6))
 
-                Text("Liney")
+                Text("LINEY")
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(.white.opacity(0.7))
+                    .lineLimit(1)
+                    .fixedSize()
 
                 Spacer()
+
+                if pixelAnimationStyle != .none {
+                    IslandPixelAnimationView(style: pixelAnimationStyle)
+                        .frame(width: 20, height: 14)
+                        .fixedSize()
+                }
             }
         }
         .padding(.horizontal, 16)

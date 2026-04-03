@@ -153,14 +153,13 @@ final class IslandPanelController: NSObject, NSWindowDelegate {
     }
 
     private func collapsedWidth() -> CGFloat {
-        let font = NSFont.systemFont(ofSize: 13, weight: .medium)
-        let title: String
-        if let item = state.latestItem {
-            title = item.title
-        } else {
-            title = "Liney"
+        if state.latestItem == nil {
+            // "Liney" + pixel animation — fixed width to prevent jitter
+            return 150
         }
 
+        let font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        let title = state.latestItem!.title
         let textWidth = (title as NSString).size(withAttributes: [.font: font]).width
         // icon(~14) + spacing(10) + text + spacing(4) + badge(~22) + horizontal padding(32)
         let hasBadge = state.badgeCount > 1

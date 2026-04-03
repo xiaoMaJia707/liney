@@ -640,6 +640,31 @@ struct SettingsSheet: View {
             } label: {
                 Text(localized("settings.dynamicIsland.enable.group"))
             }
+
+            GroupBox {
+                VStack(alignment: .leading, spacing: 14) {
+                    Picker("Pixel Animation", selection: $appSettings.dynamicIslandPixelAnimation) {
+                        ForEach(IslandPixelAnimationStyle.allCases, id: \.self) { style in
+                            Label(style.displayName, systemImage: style.iconName)
+                                .tag(style)
+                        }
+                    }
+                    .pickerStyle(.menu)
+
+                    // Preview
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Preview")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+
+                        IslandPixelAnimationPreview(style: appSettings.dynamicIslandPixelAnimation)
+                            .frame(width: 280)
+                            .id(appSettings.dynamicIslandPixelAnimation)
+                    }
+                }
+            } label: {
+                Text("Pixel Animation")
+            }
         }
     }
 
