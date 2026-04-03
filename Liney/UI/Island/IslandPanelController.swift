@@ -8,6 +8,14 @@
 import AppKit
 import SwiftUI
 
+/// NSPanel subclass that disables automatic frame constraining so the
+/// island can be positioned at the very top edge of any screen.
+private class UnconstrainedPanel: NSPanel {
+    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect {
+        return frameRect
+    }
+}
+
 @MainActor
 final class IslandPanelController: NSObject, NSWindowDelegate {
     static let shared = IslandPanelController()
@@ -20,9 +28,11 @@ final class IslandPanelController: NSObject, NSWindowDelegate {
     private var mouseEventMonitor: Any?
     private var localMouseMonitor: Any?
     private var screenObserver: NSObjectProtocol?
-    private var autoDismissTask: Task<Void, Never>?
     private var collapseTask: Task<Void, Never>?
     private var expandTask: Task<Void, Never>?
+
+    /// The screen the island is pinned to. Defaults to the primary screen.
+    private(set) var pinnedScreen: NSScreen?
 
     private let collapsedHeight: CGFloat = 32
     private let collapsedMinWidth: CGFloat = 120
@@ -32,6 +42,7 @@ final class IslandPanelController: NSObject, NSWindowDelegate {
 
     private override init() {
         super.init()
+        pinnedScreen = NSScreen.screens.first
         screenObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification,
             object: nil,
@@ -39,7 +50,13 @@ final class IslandPanelController: NSObject, NSWindowDelegate {
         ) { [weak self] _ in
             guard let self else { return }
             Task { @MainActor [weak self] in
-                self?.repositionPanel()
+                guard let self else { return }
+                // If the pinned screen was disconnected, fall back to primary
+                if let pinned = self.pinnedScreen,
+                   !NSScreen.screens.contains(where: { $0 == pinned }) {
+                    self.pinnedScreen = NSScreen.screens.first
+                }
+                self.repositionPanel()
             }
         }
     }
@@ -59,7 +76,6 @@ final class IslandPanelController: NSObject, NSWindowDelegate {
     }
 
     func hide() {
-        autoDismissTask?.cancel()
         state.isExpanded = false
         state.currentGroupID = nil
         panel?.orderOut(nil)
@@ -100,19 +116,23 @@ final class IslandPanelController: NSObject, NSWindowDelegate {
             .preferredColorScheme(.dark)
         let hostingController = NSHostingController(rootView: contentView)
 
-        let panel = NSPanel(
-            contentRect: NSRect(origin: .zero, size: NSSize(width: collapsedWidth(), height: collapsedHeight)),
-            styleMask: [.borderless, .nonactivatingPanel],
+        let targetScreen = pinnedScreen ?? NSScreen.screens.first
+        let panel = UnconstrainedPanel(
+            contentRect: targetScreen?.frame ?? .zero,
+            styleMask: [.borderless, .nonactivatingPanel, .fullSizeContentView],
             backing: .buffered,
-            defer: false
+            defer: false,
+            screen: targetScreen
         )
         panel.level = NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue + 8)
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
         panel.isMovableByWindowBackground = false
         panel.backgroundColor = .clear
         panel.isOpaque = false
-        panel.hasShadow = true
+        panel.hasShadow = false
         panel.hidesOnDeactivate = false
+        panel.titleVisibility = .hidden
+        panel.titlebarAppearsTransparent = true
         panel.contentViewController = hostingController
         panel.delegate = self
 
@@ -150,7 +170,7 @@ final class IslandPanelController: NSObject, NSWindowDelegate {
     }
 
     private func panelFrame(expanded: Bool) -> NSRect {
-        let screen = NSScreen.main ?? NSScreen.screens.first ?? NSScreen.screens[0]
+        let screen = pinnedScreen ?? NSScreen.screens.first ?? NSScreen.screens[0]
         let screenFrame = screen.frame
 
         let size: NSSize
@@ -167,17 +187,6 @@ final class IslandPanelController: NSObject, NSWindowDelegate {
         let y = screenFrame.maxY - size.height + topOverlap
 
         return NSRect(origin: NSPoint(x: x, y: y), size: size)
-    }
-
-    private func scheduleAutoDismiss() {
-        autoDismissTask?.cancel()
-        autoDismissTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 8_000_000_000)
-            guard !Task.isCancelled else { return }
-            if !state.isExpanded && !state.items.contains(where: { $0.status == .waitingForInput }) {
-                hide()
-            }
-        }
     }
 
     private func installMouseTracking() {
@@ -226,7 +235,7 @@ final class IslandPanelController: NSObject, NSWindowDelegate {
             expandTask = nil
             if state.isExpanded && collapseTask == nil {
                 collapseTask = Task { @MainActor in
-                    try? await Task.sleep(nanoseconds: 600_000_000)
+                    try? await Task.sleep(nanoseconds: 500_000_000)
                     guard !Task.isCancelled else { return }
                     self.state.isExpanded = false
                     self.state.currentGroupID = nil
@@ -270,6 +279,28 @@ final class IslandPanelController: NSObject, NSWindowDelegate {
 
             return event
         }
+    }
+
+    /// Cycle to the next screen.
+    func cycleScreen() {
+        let screens = NSScreen.screens
+        guard screens.count > 1 else { return }
+        if let current = pinnedScreen,
+           let idx = screens.firstIndex(of: current) {
+            pinnedScreen = screens[(idx + 1) % screens.count]
+        } else {
+            pinnedScreen = screens.first
+        }
+        repositionPanel()
+    }
+
+    var screenCount: Int {
+        NSScreen.screens.count
+    }
+
+    var currentScreenIndex: Int {
+        guard let pinned = pinnedScreen else { return 0 }
+        return NSScreen.screens.firstIndex(of: pinned) ?? 0
     }
 
     func windowWillClose(_ notification: Notification) {

@@ -85,6 +85,27 @@ struct IslandExpandedView: View {
                 .buttonStyle(.plain)
                 .help("Clear all notifications")
             }
+            if controller.screenCount > 1 {
+                Button {
+                    controller.cycleScreen()
+                } label: {
+                    HStack(spacing: 3) {
+                        Image(systemName: "display.2")
+                            .font(.system(size: 11))
+                        Text("\(controller.currentScreenIndex + 1)/\(controller.screenCount)")
+                            .font(.system(size: 10, weight: .medium, design: .rounded))
+                    }
+                    .foregroundStyle(.white.opacity(0.35))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(.white.opacity(0.06))
+                    )
+                }
+                .buttonStyle(.plain)
+                .help("Switch to next screen")
+            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
