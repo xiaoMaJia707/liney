@@ -240,6 +240,38 @@ struct MainWindowView: View {
                     backgroundColor: LineyTheme.chromeBackground.opacity(0.96),
                     borderColor: LineyTheme.border,
                     leadingAction: { _ in
+                        guard let workspace = store.selectedWorkspace,
+                              let workflow = workspace.preferredWorkflow else { return }
+                        store.dispatch(.runWorkflow(workspace.id, workflow.id))
+                    },
+                    trailingAction: { anchorView in
+                        present(menu: makeWorkflowMenu(), from: anchorView)
+                    },
+                    isLeadingDisabled: store.selectedWorkspace?.preferredWorkflow == nil,
+                    isTrailingDisabled: store.selectedWorkspace?.workflows.isEmpty ?? true,
+                    leadingAccessibilityLabel: localized("main.toolbar.runPreferredWorkflow"),
+                    leadingHelp: localized("main.toolbar.runPreferredWorkflow"),
+                    trailingAccessibilityLabel: localized("main.toolbar.chooseWorkflow"),
+                    trailingHelp: localized("main.toolbar.chooseWorkflow"),
+                    leadingContent: {
+                        HStack(spacing: 6) {
+                            ToolbarFeatureIcon(
+                                systemName: "play.rectangle.on.rectangle",
+                                tint: LineyTheme.accent
+                            )
+                        }
+                    },
+                    trailingContent: {
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(LineyTheme.secondaryText)
+                    }
+                    )
+
+                    ToolbarSegmentedControl(
+                    backgroundColor: LineyTheme.chromeBackground.opacity(0.96),
+                    borderColor: LineyTheme.border,
+                    leadingAction: { _ in
                         store.openSelectedWorkspaceInPreferredExternalEditor()
                     },
                     trailingAction: { anchorView in
@@ -711,6 +743,42 @@ struct MainWindowView: View {
 
         menu.addActionItem(title: localized("main.quickCommands.edit"), imageSystemName: "slider.horizontal.3") {
             store.presentQuickCommandEditor()
+        }
+
+        return menu
+    }
+
+    private func makeWorkflowMenu() -> NSMenu {
+        let menu = NSMenu()
+
+        guard let workspace = store.selectedWorkspace else {
+            menu.addDisabledItem(title: localized("main.workflows.noneConfigured"))
+            return menu
+        }
+
+        let workflows = workspace.workflows
+        if workflows.isEmpty {
+            menu.addDisabledItem(title: localized("main.workflows.noneConfigured"))
+        } else {
+            for workflow in workflows {
+                let commandCount = workflow.commands.count
+                let toolTip = commandCount > 0
+                    ? localizedFormat("main.workflows.commandCountFormat", commandCount)
+                    : nil
+                menu.addActionItem(
+                    title: workflow.name,
+                    imageSystemName: "play.rectangle.on.rectangle",
+                    isEnabled: true,
+                    toolTip: toolTip
+                ) {
+                    store.dispatch(.runWorkflow(workspace.id, workflow.id))
+                }
+            }
+        }
+
+        menu.addItem(.separator())
+        menu.addActionItem(title: localized("main.workflows.editWorkflows"), imageSystemName: "slider.horizontal.3") {
+            store.presentSettings(for: workspace)
         }
 
         return menu
