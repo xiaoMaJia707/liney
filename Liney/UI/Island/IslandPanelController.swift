@@ -72,7 +72,7 @@ final class IslandPanelController: NSObject, NSWindowDelegate {
         hasNotch ? notchSize.width + 40 : 0
     }
 
-    private let expandedWidth: CGFloat = 400
+    private var expandedWidth: CGFloat { max(400, collapsedMaxWidth) }
     private let expandedMaxHeight: CGFloat = 500
 
     private var collapsedMaxWidth: CGFloat {
