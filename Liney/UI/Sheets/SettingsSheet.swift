@@ -1011,6 +1011,42 @@ struct SettingsSheet: View {
                                             Text(mode.title).tag(mode)
                                         }
                                     }
+
+                                    Divider()
+
+                                    HStack {
+                                        Text(localized("settings.workspace.workflow.batchCommands"))
+                                            .font(.system(size: 11, weight: .semibold))
+                                        Spacer()
+                                        Button(localized("settings.workspace.workflow.addBatchCommand")) {
+                                            workflow.commands.append(WorkspaceWorkflowBatchCommand())
+                                        }
+                                    }
+
+                                    ForEach($workflow.commands) { $cmd in
+                                        HStack(spacing: 8) {
+                                            TextField(localized("settings.workspace.workflow.batchCommand.name"), text: $cmd.name)
+                                                .frame(maxWidth: 100)
+                                            TextField(localized("settings.workspace.workflow.batchCommand.command"), text: $cmd.command)
+                                            Picker("", selection: $cmd.splitAxis) {
+                                                Text(localized("settings.workflow.batchCommand.splitRight")).tag(PaneSplitAxis.vertical)
+                                                Text(localized("settings.workflow.batchCommand.splitDown")).tag(PaneSplitAxis.horizontal)
+                                            }
+                                            .frame(maxWidth: 100)
+                                            Button(role: .destructive) {
+                                                workflow.commands.removeAll { $0.id == cmd.id }
+                                            } label: {
+                                                Image(systemName: "minus.circle")
+                                            }
+                                            .buttonStyle(.borderless)
+                                        }
+                                    }
+
+                                    if !workflow.commands.isEmpty {
+                                        Text(localized("settings.workspace.workflow.batchCommandsHint"))
+                                            .font(.system(size: 10))
+                                            .foregroundStyle(.tertiary)
+                                    }
                                 }
                                 .padding(12)
                                 .background(LineyTheme.subtleFill, in: RoundedRectangle(cornerRadius: 10, style: .continuous))

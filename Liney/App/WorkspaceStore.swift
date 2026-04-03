@@ -3137,6 +3137,24 @@ final class WorkspaceStore: ObservableObject {
             launchWorkflowAgent(using: preset, mode: workflow.agentMode, in: workspace)
         }
 
+        for batchCommand in workflow.commands {
+            let trimmed = batchCommand.command.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            let snapshot = PaneSnapshot(
+                id: UUID(),
+                preferredWorkingDirectory: workspace.activeWorktreePath,
+                preferredEngine: .libghosttyPreferred,
+                backendConfiguration: .local()
+            )
+            workspace.createPane(splitAxis: batchCommand.splitAxis, snapshot: snapshot)
+            if let session = workspace.sessionController.session(for: snapshot.id) {
+                session.sendShellCommand(trimmed)
+            }
+        }
+        if !workflow.commands.isEmpty {
+            persist()
+        }
+
         recordActivity(
             in: workspace,
             kind: .workflow,
