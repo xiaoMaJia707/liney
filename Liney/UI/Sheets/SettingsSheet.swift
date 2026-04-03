@@ -670,8 +670,8 @@ struct SettingsSheet: View {
                             .font(.callout)
                             .foregroundStyle(.secondary)
 
-                        IslandPixelAnimationPreview(style: appSettings.dynamicIslandPixelAnimation)
-                            .frame(width: appSettings.dynamicIslandWidth.collapsedMaxWidth, height: appSettings.dynamicIslandHeight.collapsedHeight)
+                        IslandPixelAnimationPreview(style: appSettings.dynamicIslandPixelAnimation, previewHeight: appSettings.dynamicIslandHeight.collapsedHeight)
+                            .frame(width: appSettings.dynamicIslandWidth.collapsedMaxWidth)
                             .id(appSettings.dynamicIslandPixelAnimation)
                     }
                 }

@@ -315,6 +315,7 @@ struct IslandPixelAnimationView: View {
 /// A mini Dynamic-Island-style preview used in Settings.
 struct IslandPixelAnimationPreview: View {
     let style: IslandPixelAnimationStyle
+    var previewHeight: CGFloat = 32
 
     var body: some View {
         HStack(spacing: 10) {
@@ -337,13 +338,13 @@ struct IslandPixelAnimationPreview: View {
         }
         .padding(.horizontal, 16)
         .frame(maxWidth: .infinity)
-        .frame(height: 32)
+        .frame(height: previewHeight)
         .background(
-            RoundedRectangle(cornerRadius: 20)
+            RoundedRectangle(cornerRadius: previewHeight / 2)
                 .fill(Color(red: 0.08, green: 0.08, blue: 0.09))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 20)
+            RoundedRectangle(cornerRadius: previewHeight / 2)
                 .stroke(.white.opacity(0.08), lineWidth: 0.5)
         )
     }
