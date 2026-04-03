@@ -886,6 +886,7 @@ struct SettingsSheet: View {
 
                             ForEach($workspaceSettings.workflows) { $workflow in
                                 VStack(alignment: .leading, spacing: 10) {
+                                    // Header: name + delete
                                     HStack {
                                         TextField(localized("settings.workspace.workflow.name"), text: $workflow.name)
                                         Button(role: .destructive) {
@@ -895,33 +896,7 @@ struct SettingsSheet: View {
                                         }
                                     }
 
-                                    Picker(localized("settings.workspace.workflow.localShell"), selection: $workflow.localSessionMode) {
-                                        ForEach(WorkspaceWorkflowLocalSessionMode.allCases) { mode in
-                                            Text(mode.title).tag(mode)
-                                        }
-                                    }
-
-                                    Toggle(localized("settings.workspace.workflow.runSetupScript"), isOn: $workflow.runSetupScript)
-                                    Toggle(localized("settings.workspace.workflow.runWorkspaceScript"), isOn: $workflow.runWorkspaceScript)
-
-                                    Picker(localized("settings.workspace.workflow.agentPreset"), selection: Binding(
-                                        get: { workflow.agentPresetID },
-                                        set: { workflow.agentPresetID = $0 }
-                                    )) {
-                                        Text(localized("settings.workspace.workflow.noAgent")).tag(Optional<UUID>.none)
-                                        ForEach(appSettings.agentPresets) { preset in
-                                            Text(preset.name).tag(Optional(preset.id))
-                                        }
-                                    }
-
-                                    Picker(localized("settings.workspace.workflow.agentLaunch"), selection: $workflow.agentMode) {
-                                        ForEach(WorkspaceWorkflowAgentMode.allCases) { mode in
-                                            Text(mode.title).tag(mode)
-                                        }
-                                    }
-
-                                    Divider()
-
+                                    // Batch commands
                                     HStack {
                                         Text(localized("settings.workspace.workflow.batchCommands"))
                                             .font(.system(size: 11, weight: .semibold))
@@ -932,29 +907,68 @@ struct SettingsSheet: View {
                                     }
 
                                     ForEach($workflow.commands) { $cmd in
-                                        HStack(spacing: 8) {
-                                            TextField(localized("settings.workspace.workflow.batchCommand.name"), text: $cmd.name)
-                                                .frame(maxWidth: 100)
+                                        VStack(alignment: .leading, spacing: 6) {
+                                            HStack {
+                                                TextField(localized("settings.workspace.workflow.batchCommand.name"), text: $cmd.name)
+                                                    .frame(maxWidth: 140)
+                                                Picker("", selection: $cmd.splitAxis) {
+                                                    Text(localized("settings.workflow.batchCommand.splitRight")).tag(PaneSplitAxis.vertical)
+                                                    Text(localized("settings.workflow.batchCommand.splitDown")).tag(PaneSplitAxis.horizontal)
+                                                }
+                                                .frame(maxWidth: 110)
+                                                Spacer()
+                                                Button(role: .destructive) {
+                                                    workflow.commands.removeAll { $0.id == cmd.id }
+                                                } label: {
+                                                    Image(systemName: "minus.circle")
+                                                }
+                                                .buttonStyle(.borderless)
+                                            }
                                             TextField(localized("settings.workspace.workflow.batchCommand.command"), text: $cmd.command)
-                                            Picker("", selection: $cmd.splitAxis) {
-                                                Text(localized("settings.workflow.batchCommand.splitRight")).tag(PaneSplitAxis.vertical)
-                                                Text(localized("settings.workflow.batchCommand.splitDown")).tag(PaneSplitAxis.horizontal)
-                                            }
-                                            .frame(maxWidth: 100)
-                                            Button(role: .destructive) {
-                                                workflow.commands.removeAll { $0.id == cmd.id }
-                                            } label: {
-                                                Image(systemName: "minus.circle")
-                                            }
-                                            .buttonStyle(.borderless)
+                                                .font(.system(size: 12, design: .monospaced))
                                         }
+                                        .padding(8)
+                                        .background(LineyTheme.chromeBackground.opacity(0.5), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                                     }
 
-                                    if !workflow.commands.isEmpty {
+                                    if workflow.commands.isEmpty {
                                         Text(localized("settings.workspace.workflow.batchCommandsHint"))
                                             .font(.system(size: 10))
                                             .foregroundStyle(.tertiary)
                                     }
+
+                                    // Advanced options (collapsed by default)
+                                    DisclosureGroup(localized("settings.workspace.workflow.advanced")) {
+                                        VStack(alignment: .leading, spacing: 10) {
+                                            Picker(localized("settings.workspace.workflow.localShell"), selection: $workflow.localSessionMode) {
+                                                ForEach(WorkspaceWorkflowLocalSessionMode.allCases) { mode in
+                                                    Text(mode.title).tag(mode)
+                                                }
+                                            }
+
+                                            Toggle(localized("settings.workspace.workflow.runSetupScript"), isOn: $workflow.runSetupScript)
+                                            Toggle(localized("settings.workspace.workflow.runWorkspaceScript"), isOn: $workflow.runWorkspaceScript)
+
+                                            Picker(localized("settings.workspace.workflow.agentPreset"), selection: Binding(
+                                                get: { workflow.agentPresetID },
+                                                set: { workflow.agentPresetID = $0 }
+                                            )) {
+                                                Text(localized("settings.workspace.workflow.noAgent")).tag(Optional<UUID>.none)
+                                                ForEach(appSettings.agentPresets) { preset in
+                                                    Text(preset.name).tag(Optional(preset.id))
+                                                }
+                                            }
+
+                                            Picker(localized("settings.workspace.workflow.agentLaunch"), selection: $workflow.agentMode) {
+                                                ForEach(WorkspaceWorkflowAgentMode.allCases) { mode in
+                                                    Text(mode.title).tag(mode)
+                                                }
+                                            }
+                                        }
+                                        .padding(.top, 6)
+                                    }
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundStyle(.secondary)
                                 }
                                 .padding(12)
                                 .background(LineyTheme.subtleFill, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
