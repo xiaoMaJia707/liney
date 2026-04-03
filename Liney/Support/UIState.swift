@@ -38,6 +38,11 @@ struct QuickCommandEditorRequest: Identifiable {
     let id = UUID()
 }
 
+struct WorkflowEditorRequest: Identifiable {
+    let id = UUID()
+    let workspaceID: UUID
+}
+
 struct WorkspaceFileBrowserRequest: Identifiable {
     let id = UUID()
     let workspaceID: UUID

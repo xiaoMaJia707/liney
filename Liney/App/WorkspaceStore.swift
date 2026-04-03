@@ -29,6 +29,7 @@ final class WorkspaceStore: ObservableObject {
     @Published var selectedCommandPaletteItemID: String?
     @Published var settingsRequest: WorkspaceSettingsRequest?
     @Published var quickCommandEditorRequest: QuickCommandEditorRequest?
+    @Published var workflowEditorRequest: WorkflowEditorRequest?
 
     @Published var workspaceFileBrowserRequest: WorkspaceFileBrowserRequest?
     @Published var sidebarIconCustomizationRequest: SidebarIconCustomizationRequest?
@@ -779,6 +780,10 @@ final class WorkspaceStore: ObservableObject {
 
     func presentQuickCommandEditor() {
         quickCommandEditorRequest = QuickCommandEditorRequest()
+    }
+
+    func presentWorkflowEditor(for workspace: WorkspaceModel) {
+        workflowEditorRequest = WorkflowEditorRequest(workspaceID: workspace.id)
     }
 
     func presentSidebarIconCustomization(for workspace: WorkspaceModel) {

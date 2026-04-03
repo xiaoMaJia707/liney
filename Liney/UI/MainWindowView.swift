@@ -248,7 +248,7 @@ struct MainWindowView: View {
                         present(menu: makeWorkflowMenu(), from: anchorView)
                     },
                     isLeadingDisabled: store.selectedWorkspace?.preferredWorkflow == nil,
-                    isTrailingDisabled: store.selectedWorkspace?.workflows.isEmpty ?? true,
+                    isTrailingDisabled: !hasSelectedWorkspace,
                     leadingAccessibilityLabel: localized("main.toolbar.runPreferredWorkflow"),
                     leadingHelp: localized("main.toolbar.runPreferredWorkflow"),
                     trailingAccessibilityLabel: localized("main.toolbar.chooseWorkflow"),
@@ -586,6 +586,10 @@ struct MainWindowView: View {
             QuickCommandEditorSheet()
                 .environmentObject(store)
         }
+        .sheet(item: $store.workflowEditorRequest) { request in
+            WorkflowEditorSheet(workspaceID: request.workspaceID)
+                .environmentObject(store)
+        }
 
         .sheet(item: $store.workspaceFileBrowserRequest) { request in
             WorkspaceFileBrowserSheet(request: request)
@@ -772,18 +776,12 @@ struct MainWindowView: View {
         menu.addItem(.separator())
         menu.addActionItem(title: localized("main.workflows.addWorkflow"), imageSystemName: "plus") {
             workspace.settings.workflows.append(
-                WorkspaceWorkflow(
-                    name: localized("defaults.workflow.name"),
-                    localSessionMode: .reuseFocused,
-                    runSetupScript: false,
-                    runWorkspaceScript: false,
-                    agentMode: .none
-                )
+                WorkspaceWorkflow(name: localized("defaults.workflow.name"))
             )
-            store.presentSettings(for: workspace)
+            store.presentWorkflowEditor(for: workspace)
         }
         menu.addActionItem(title: localized("main.workflows.editWorkflows"), imageSystemName: "slider.horizontal.3") {
-            store.presentSettings(for: workspace)
+            store.presentWorkflowEditor(for: workspace)
         }
 
         return menu
