@@ -41,8 +41,9 @@ struct IslandCollapsedView: View {
                     .foregroundStyle(.white.opacity(0.6))
 
                 Text("LINEY")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.7))
+                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    .tracking(2)
+                    .foregroundStyle(.white.opacity(0.75))
                     .lineLimit(1)
                     .fixedSize()
 

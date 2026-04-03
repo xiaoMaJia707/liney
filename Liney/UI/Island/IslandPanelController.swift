@@ -155,7 +155,7 @@ final class IslandPanelController: NSObject, NSWindowDelegate {
     private func collapsedWidth() -> CGFloat {
         if state.latestItem == nil {
             // "Liney" + pixel animation — fixed width to prevent jitter
-            return 150
+            return 160
         }
 
         let font = NSFont.systemFont(ofSize: 13, weight: .medium)

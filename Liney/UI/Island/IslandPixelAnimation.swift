@@ -12,8 +12,6 @@ import SwiftUI
 
 enum IslandPixelAnimationStyle: String, Codable, CaseIterable, Hashable {
     case none
-    case sequential
-    case sparkle
     case pixelDino
     case pixelDuck
     case pixelCrab
@@ -25,8 +23,6 @@ enum IslandPixelAnimationStyle: String, Codable, CaseIterable, Hashable {
     var displayName: String {
         switch self {
         case .none: return "None"
-        case .sequential: return "Sequential"
-        case .sparkle: return "Sparkle"
         case .pixelDino: return "Pixel Dino"
         case .pixelDuck: return "Pixel Duck"
         case .pixelCrab: return "Pixel Crab"
@@ -40,10 +36,8 @@ enum IslandPixelAnimationStyle: String, Codable, CaseIterable, Hashable {
     var iconName: String {
         switch self {
         case .none: return "circle.dashed"
-        case .sequential: return "chart.bar.fill"
-        case .sparkle: return "sparkles"
         case .pixelDino: return "fossil.shell.fill"
-        case .pixelDuck: return "duck.fill"
+        case .pixelDuck: return "bird.fill"
         case .pixelCrab: return "fish.fill"
         case .pixelFish: return "fish.fill"
         case .pixelCat: return "cat.fill"
@@ -63,71 +57,6 @@ enum IslandPixelAnimationStyle: String, Codable, CaseIterable, Hashable {
             return Self.concreteStyles.randomElement()!
         }
         return self
-    }
-}
-
-// MARK: - Shared palette
-
-private let pixelColors: [Color] = [
-    .red, .orange, .yellow, .green, .cyan, .blue, .purple, .pink,
-    .mint, .indigo, .teal,
-]
-
-// MARK: - Sequential Bar
-
-struct IslandSequentialBar: View {
-    private let count = 5
-    @State private var activeIndex: Int = 0
-    @State private var colors: [Color] = (0..<5).map { _ in pixelColors.randomElement()! }
-
-    private let timer = Timer.publish(every: 0.35, on: .main, in: .common).autoconnect()
-
-    var body: some View {
-        HStack(spacing: 2) {
-            ForEach(0..<count, id: \.self) { i in
-                RoundedRectangle(cornerRadius: 1)
-                    .fill(colors[i])
-                    .frame(width: 3, height: 3)
-                    .opacity(i == activeIndex ? 1 : 0.2)
-            }
-        }
-        .onReceive(timer) { _ in
-            withAnimation(.easeInOut(duration: 0.25)) {
-                activeIndex = (activeIndex + 1) % count
-                colors[activeIndex] = pixelColors.randomElement()!
-            }
-        }
-    }
-}
-
-// MARK: - Random Sparkle
-
-struct IslandRandomSparkle: View {
-    private let count = 4
-    @State private var colors: [Color] = (0..<4).map { _ in pixelColors.randomElement()! }
-    @State private var opacities: [Double] = (0..<4).map { _ in Double.random(in: 0.3...1) }
-
-    private let timer = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()
-
-    var body: some View {
-        HStack(spacing: 2) {
-            ForEach(0..<count, id: \.self) { i in
-                RoundedRectangle(cornerRadius: 1)
-                    .fill(colors[i])
-                    .frame(width: 3, height: 3)
-                    .opacity(opacities[i])
-            }
-        }
-        .onReceive(timer) { _ in
-            withAnimation(.easeInOut(duration: 0.4)) {
-                let target = Int.random(in: 1...count)
-                for _ in 0..<target {
-                    let idx = Int.random(in: 0..<count)
-                    colors[idx] = pixelColors.randomElement()!
-                    opacities[idx] = Double.random(in: 0.3...1)
-                }
-            }
-        }
     }
 }
 
@@ -349,17 +278,13 @@ private struct IslandDog: View {
 /// Shows the pixel animation for a given style. Resolves `.random` once on appear.
 struct IslandPixelAnimationView: View {
     let style: IslandPixelAnimationStyle
-    @State private var resolved: IslandPixelAnimationStyle = .sparkle
+    @State private var resolved: IslandPixelAnimationStyle = .pixelDino
 
     var body: some View {
         Group {
             switch resolved {
             case .none:
                 EmptyView()
-            case .sequential:
-                IslandSequentialBar()
-            case .sparkle:
-                IslandRandomSparkle()
             case .pixelDino:
                 IslandDino()
             case .pixelDuck:
@@ -373,7 +298,7 @@ struct IslandPixelAnimationView: View {
             case .pixelDog:
                 IslandDog()
             case .random:
-                IslandRandomSparkle()
+                IslandDino()
             }
         }
         .onAppear {
@@ -398,8 +323,9 @@ struct IslandPixelAnimationPreview: View {
                 .foregroundStyle(.white.opacity(0.6))
 
             Text("LINEY")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(.white.opacity(0.7))
+                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                .tracking(2)
+                .foregroundStyle(.white.opacity(0.75))
 
             Spacer()
 
