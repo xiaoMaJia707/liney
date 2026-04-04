@@ -41,7 +41,7 @@ final class IslandPanelController: NSObject, NSWindowDelegate {
     }
 
     private var heightPreset: IslandHeightPreset {
-        workspaceStore?.appSettings.dynamicIslandHeight ?? .standard
+        workspaceStore?.appSettings.dynamicIslandHeight ?? .notch
     }
 
     /// Detect notch dimensions on the pinned screen.

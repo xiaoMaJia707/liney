@@ -279,7 +279,7 @@ nonisolated enum IslandWidthPreset: String, Codable, Hashable, CaseIterable, Ide
 
 nonisolated enum IslandHeightPreset: String, Codable, Hashable, CaseIterable, Identifiable {
     case compact
-    case standard
+    case notch
     case tall
 
     var id: String { rawValue }
@@ -287,7 +287,7 @@ nonisolated enum IslandHeightPreset: String, Codable, Hashable, CaseIterable, Id
     var collapsedHeight: CGFloat {
         switch self {
         case .compact:  return 32
-        case .standard: return 38
+        case .notch:    return 37
         case .tall:     return 44
         }
     }
@@ -295,7 +295,7 @@ nonisolated enum IslandHeightPreset: String, Codable, Hashable, CaseIterable, Id
     var title: String {
         switch self {
         case .compact:  return lineyLocalizedSettingsString("settings.dynamicIsland.height.compact")
-        case .standard: return lineyLocalizedSettingsString("settings.dynamicIsland.height.standard")
+        case .notch:    return lineyLocalizedSettingsString("settings.dynamicIsland.height.notch")
         case .tall:     return lineyLocalizedSettingsString("settings.dynamicIsland.height.tall")
         }
     }
@@ -361,7 +361,7 @@ struct AppSettings: Codable, Hashable {
         dynamicIslandPersistent: Bool = true,
         dynamicIslandPixelAnimation: IslandPixelAnimationStyle = .random,
         dynamicIslandWidth: IslandWidthPreset = .standard,
-        dynamicIslandHeight: IslandHeightPreset = .standard,
+        dynamicIslandHeight: IslandHeightPreset = .notch,
         showArchivedWorkspaces: Bool = false,
         uiScale: Double = 1,
         terminalFontFamily: String? = nil,
@@ -526,7 +526,7 @@ extension AppSettings {
             dynamicIslandPersistent: try container.decodeIfPresent(Bool.self, forKey: .dynamicIslandPersistent) ?? true,
             dynamicIslandPixelAnimation: try container.decodeIfPresent(IslandPixelAnimationStyle.self, forKey: .dynamicIslandPixelAnimation) ?? .random,
             dynamicIslandWidth: try container.decodeIfPresent(IslandWidthPreset.self, forKey: .dynamicIslandWidth) ?? .standard,
-            dynamicIslandHeight: try container.decodeIfPresent(IslandHeightPreset.self, forKey: .dynamicIslandHeight) ?? .standard,
+            dynamicIslandHeight: try container.decodeIfPresent(IslandHeightPreset.self, forKey: .dynamicIslandHeight) ?? .notch,
             showArchivedWorkspaces: try container.decodeIfPresent(Bool.self, forKey: .showArchivedWorkspaces) ?? false,
             uiScale: try container.decodeIfPresent(Double.self, forKey: .uiScale) ?? 1,
             terminalFontFamily: try container.decodeIfPresent(String.self, forKey: .terminalFontFamily),
