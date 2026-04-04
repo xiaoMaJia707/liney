@@ -885,6 +885,15 @@ private final class LineyGhosttySurfaceView: NSView {
             return
         }
 
+        if let escapeSequence = lineyGhosttyOptionDeleteEscapeSequence(
+            keyCode: event.keyCode,
+            modifierFlags: event.modifierFlags
+        ) {
+            logArrowKeyDebug(event, phase: "keyDown option-delete")
+            sendText(escapeSequence)
+            return
+        }
+
         if let escapeSequence = lineyGhosttySSHWordNavigationEscapeSequence(
             keyCode: event.keyCode,
             modifierFlags: event.modifierFlags,
@@ -988,6 +997,14 @@ private final class LineyGhosttySurfaceView: NSView {
             return false
         }
         guard let surface else { return false }
+
+        if let escapeSequence = lineyGhosttyOptionDeleteEscapeSequence(
+            keyCode: event.keyCode,
+            modifierFlags: event.modifierFlags
+        ) {
+            sendText(escapeSequence)
+            return true
+        }
 
         if let escapeSequence = lineyGhosttySSHWordNavigationEscapeSequence(
             keyCode: event.keyCode,
@@ -1113,27 +1130,13 @@ private final class LineyGhosttySurfaceView: NSView {
             if hasMarkedText() {
                 unmarkText()
             }
-            if let event = NSApp.currentEvent, let surface {
-                sendRawKeyEvent(
-                    event,
-                    on: surface,
-                    translationEvent: event,
-                    translationMods: event.modifierFlags
-                )
-            }
+            sendText("\u{1B}\u{7F}")
         case .deleteWordForward:
             handledTextInputCommand = true
             if hasMarkedText() {
                 unmarkText()
             }
-            if let event = NSApp.currentEvent, let surface {
-                sendRawKeyEvent(
-                    event,
-                    on: surface,
-                    translationEvent: event,
-                    translationMods: event.modifierFlags
-                )
-            }
+            sendText("\u{1B}[3;3~")
         case .deleteBackwardInMarkedText:
             handledTextInputCommand = true
             deleteBackwardInMarkedText()

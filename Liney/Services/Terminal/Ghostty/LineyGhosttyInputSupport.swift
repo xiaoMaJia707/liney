@@ -368,6 +368,30 @@ func lineyGhosttySSHWordNavigationEscapeSequence(
     }
 }
 
+/// Option+Delete escape sequence for "delete word backward".
+/// Works for all backend types (local shell, SSH, agent).
+func lineyGhosttyOptionDeleteEscapeSequence(
+    keyCode: UInt16,
+    modifierFlags: NSEvent.ModifierFlags
+) -> String? {
+    let relevantModifiers = lineyGhosttyRelevantModifierFlags(modifierFlags)
+    guard relevantModifiers.contains(.option),
+          !relevantModifiers.contains(.command),
+          !relevantModifiers.contains(.control),
+          !relevantModifiers.contains(.shift) else {
+        return nil
+    }
+
+    switch keyCode {
+    case UInt16(kVK_Delete):
+        return "\u{1B}\u{7F}"
+    case UInt16(kVK_ForwardDelete):
+        return "\u{1B}[3;3~"
+    default:
+        return nil
+    }
+}
+
 func lineyGhosttyRelevantModifierFlags(_ modifierFlags: NSEvent.ModifierFlags) -> NSEvent.ModifierFlags {
     var relevantModifiers = modifierFlags.intersection(.deviceIndependentFlagsMask)
     let rawFlags = modifierFlags.rawValue
