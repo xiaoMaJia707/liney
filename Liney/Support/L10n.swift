@@ -70,7 +70,7 @@ enum L10nTable {
         "activity.hapi.showedSettings": "Showed HAPI settings",
         "activity.cloudflared.startedTunnelProxy": "Started cloudflared tunnel proxy",
         "activity.cloudflared.startedTunnelLogin": "Started cloudflared tunnel login",
-        "activity.cloudflared.startedTunnelRun": "Started cloudflared tunnel run",
+        "activity.cloudflared.startedTunnelRun": "Started cloudflared tunnel run hapi",
         "extension.support.website": "Open Liney Website",
         "extension.support.feedback": "Send Liney Feedback",
         "extension.support.websiteOpened": "Opened Liney website",

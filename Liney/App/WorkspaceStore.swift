@@ -1886,9 +1886,9 @@ final class WorkspaceStore: ObservableObject {
         guard let workspace = workspaces.first(where: { $0.id == workspaceID }) else { return }
         launchWrappedHomeCommand(
             in: workspace,
-            name: "Cloudflared Tunnel Run",
+            name: "Cloudflared Tunnel Run HAPI",
             executablePath: availableHAPIInstallation?.cloudflaredExecutablePath,
-            arguments: ["tunnel", "run"],
+            arguments: ["tunnel", "run", "hapi"],
             activityTitle: localized("activity.cloudflared.startedTunnelRun"),
             missingExecutableMessage: localized("status.hapi.installCloudflaredToLaunch")
         )

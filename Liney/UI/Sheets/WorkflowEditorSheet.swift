@@ -104,7 +104,7 @@ struct WorkflowEditorSheet: View {
             commands: [
                 (name: "Hub", command: "hapi hub"),
                 (name: "HAPI", command: "hapi"),
-                (name: "Tunnel", command: "cloudflared tunnel run"),
+                (name: "Tunnel", command: "cloudflared tunnel run hapi"),
             ]
         ),
     ]
