@@ -76,8 +76,7 @@ struct WorkflowEditorSheet: View {
             }
             .padding()
         }
-        .frame(minWidth: 560, minHeight: 400)
-        .frame(maxWidth: 700, maxHeight: 600)
+        .frame(width: 860, height: 620)
     }
 
     @ViewBuilder
