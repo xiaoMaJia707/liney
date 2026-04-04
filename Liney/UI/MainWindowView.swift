@@ -239,18 +239,16 @@ struct MainWindowView: View {
                     ToolbarSegmentedControl(
                     backgroundColor: LineyTheme.chromeBackground.opacity(0.96),
                     borderColor: LineyTheme.border,
-                    leadingAction: { _ in
-                        guard let workspace = store.selectedWorkspace,
-                              let workflow = workspace.preferredWorkflow else { return }
-                        store.dispatch(.runWorkflow(workspace.id, workflow.id))
+                    leadingAction: { anchorView in
+                        present(menu: makeWorkflowMenu(), from: anchorView)
                     },
                     trailingAction: { anchorView in
                         present(menu: makeWorkflowMenu(), from: anchorView)
                     },
-                    isLeadingDisabled: store.selectedWorkspace?.preferredWorkflow == nil,
+                    isLeadingDisabled: !hasSelectedWorkspace,
                     isTrailingDisabled: !hasSelectedWorkspace,
-                    leadingAccessibilityLabel: localized("main.toolbar.runPreferredWorkflow"),
-                    leadingHelp: localized("main.toolbar.runPreferredWorkflow"),
+                    leadingAccessibilityLabel: localized("main.toolbar.chooseWorkflow"),
+                    leadingHelp: localized("main.toolbar.chooseWorkflow"),
                     trailingAccessibilityLabel: localized("main.toolbar.chooseWorkflow"),
                     trailingHelp: localized("main.toolbar.chooseWorkflow"),
                     leadingContent: {
