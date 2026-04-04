@@ -339,12 +339,16 @@ struct SettingsSheet: View {
 
                 HStack {
                     Spacer()
-                    Button(localized("settings.button.cancel")) {
+                    Button {
                         LocalizationManager.shared.updateSelectedLanguage(originalAppLanguage)
                         dismiss()
+                    } label: {
+                        Label(localized("settings.button.cancel"), systemImage: "xmark")
                     }
-                    Button(localized("settings.button.save")) {
+                    Button {
                         save()
+                    } label: {
+                        Label(localized("settings.button.save"), systemImage: "checkmark")
                     }
                     .buttonStyle(.borderedProminent)
                 }
@@ -422,6 +426,7 @@ struct SettingsSheet: View {
                     Toggle(localized("settings.general.behavior.enableFileWatchers"), isOn: $appSettings.fileWatcherEnabled)
                     Toggle(localized("settings.general.behavior.allowSystemNotifications"), isOn: $appSettings.systemNotificationsEnabled)
                     Toggle(localized("settings.general.behavior.showArchivedWorkspaces"), isOn: $appSettings.showArchivedWorkspaces)
+                    Toggle(localized("settings.general.behavior.showHAPIToolbarButton"), isOn: $appSettings.showHAPIToolbarButton)
 
                     Divider()
 
@@ -643,6 +648,20 @@ struct SettingsSheet: View {
 
             GroupBox {
                 VStack(alignment: .leading, spacing: 14) {
+                    Picker(localized("settings.dynamicIsland.width"), selection: $appSettings.dynamicIslandWidth) {
+                        ForEach(IslandWidthPreset.allCases) { preset in
+                            Text(preset.title).tag(preset)
+                        }
+                    }
+                    .pickerStyle(.menu)
+
+                    Picker(localized("settings.dynamicIsland.height"), selection: $appSettings.dynamicIslandHeight) {
+                        ForEach(IslandHeightPreset.allCases) { preset in
+                            Text(preset.title).tag(preset)
+                        }
+                    }
+                    .pickerStyle(.menu)
+
                     Picker("Pixel Animation", selection: $appSettings.dynamicIslandPixelAnimation) {
                         ForEach(IslandPixelAnimationStyle.allCases, id: \.self) { style in
                             Label(style.displayName, systemImage: style.iconName)
@@ -651,19 +670,18 @@ struct SettingsSheet: View {
                     }
                     .pickerStyle(.menu)
 
-                    // Preview
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Preview")
                             .font(.callout)
                             .foregroundStyle(.secondary)
 
-                        IslandPixelAnimationPreview(style: appSettings.dynamicIslandPixelAnimation)
-                            .frame(width: 280)
+                        IslandPixelAnimationPreview(style: appSettings.dynamicIslandPixelAnimation, previewHeight: appSettings.dynamicIslandHeight.collapsedHeight)
+                            .frame(width: appSettings.dynamicIslandWidth.collapsedMaxWidth)
                             .id(appSettings.dynamicIslandPixelAnimation)
                     }
                 }
             } label: {
-                Text("Pixel Animation")
+                Text(localized("settings.dynamicIsland.size.group"))
             }
         }
     }
@@ -839,194 +857,6 @@ struct SettingsSheet: View {
                             .frame(height: 80)
                             .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.white.opacity(0.08)))
                     }
-                    VStack(alignment: .leading, spacing: 8) {
-                            HStack {
-                                Text(localized("settings.workspace.remoteTargets"))
-                                    .font(.system(size: 12, weight: .semibold))
-                                Spacer()
-                                Button(localized("settings.workspace.addRemoteTarget")) {
-                                    workspaceSettings.remoteTargets.append(
-                                        RemoteWorkspaceTarget(
-                                            name: localized("defaults.remote.name"),
-                                            ssh: SSHSessionConfiguration(
-                                                host: "",
-                                                user: nil,
-                                                port: nil,
-                                                identityFilePath: nil,
-                                                remoteWorkingDirectory: nil,
-                                                remoteCommand: nil
-                                            ),
-                                            sshPresetID: nil,
-                                            agentPresetID: appSettings.preferredAgentPresetID
-                                        )
-                                    )
-                                }
-                            }
-
-                            if workspaceSettings.remoteTargets.isEmpty {
-                                Text(localized("settings.workspace.remoteTargetsHint"))
-                                    .font(.system(size: 11, weight: .medium))
-                                    .foregroundStyle(.secondary)
-                            }
-
-                            ForEach($workspaceSettings.remoteTargets) { $target in
-                                VStack(alignment: .leading, spacing: 8) {
-                                    HStack {
-                                        TextField(localized("settings.workspace.remoteTarget.name"), text: $target.name)
-                                        TextField(localized("settings.workspace.remoteTarget.host"), text: $target.ssh.host)
-                                        Button(role: .destructive) {
-                                            workspaceSettings.remoteTargets.removeAll { $0.id == target.id }
-                                        } label: {
-                                            Image(systemName: "trash")
-                                        }
-                                    }
-
-                                    HStack {
-                                        TextField(localized("settings.workspace.remoteTarget.user"), text: Binding(
-                                            get: { target.ssh.user ?? "" },
-                                            set: { target.ssh.user = $0.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty }
-                                        ))
-                                        TextField(localized("settings.workspace.remoteTarget.port"), text: Binding(
-                                            get: { target.ssh.port.map(String.init) ?? "" },
-                                            set: { target.ssh.port = Int($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
-                                        ))
-                                        .frame(width: 90)
-                                        TextField(localized("settings.workspace.remoteTarget.identityFile"), text: Binding(
-                                            get: { target.ssh.identityFilePath ?? "" },
-                                            set: { target.ssh.identityFilePath = $0.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty }
-                                        ))
-                                    }
-
-                                    TextField(localized("settings.workspace.remoteTarget.workspacePath"), text: Binding(
-                                        get: { target.ssh.remoteWorkingDirectory ?? "" },
-                                        set: { target.ssh.remoteWorkingDirectory = $0.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty }
-                                    ))
-
-                                    Picker(localized("settings.workspace.remoteTarget.sshPreset"), selection: Binding(
-                                        get: { target.sshPresetID },
-                                        set: { newValue in
-                                            target.sshPresetID = newValue
-                                            if let presetID = newValue,
-                                               let preset = appSettings.sshPresets.first(where: { $0.id == presetID }) {
-                                                if let host = preset.host {
-                                                    target.ssh.host = host
-                                                }
-                                                if let user = preset.user {
-                                                    target.ssh.user = user
-                                                }
-                                                if let port = preset.port {
-                                                    target.ssh.port = port
-                                                }
-                                                if let identityFilePath = preset.identityFilePath {
-                                                    target.ssh.identityFilePath = identityFilePath
-                                                }
-                                                if let remoteWorkingDirectory = preset.remoteWorkingDirectory {
-                                                    target.ssh.remoteWorkingDirectory = remoteWorkingDirectory
-                                                }
-                                                target.ssh.remoteCommand = preset.remoteCommand.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
-                                            }
-                                        }
-                                    )) {
-                                        Text(localized("settings.workspace.remoteTarget.noSSHPreset")).tag(Optional<UUID>.none)
-                                        ForEach(appSettings.sshPresets) { preset in
-                                            Text(preset.name).tag(Optional(preset.id))
-                                        }
-                                    }
-
-                                    Picker(localized("settings.workspace.remoteTarget.agentPreset"), selection: Binding(
-                                        get: { target.agentPresetID },
-                                        set: { target.agentPresetID = $0 }
-                                    )) {
-                                        Text(localized("settings.workspace.remoteTarget.noAgent")).tag(Optional<UUID>.none)
-                                        ForEach(appSettings.agentPresets) { preset in
-                                            Text(preset.name).tag(Optional(preset.id))
-                                        }
-                                    }
-                                }
-                                .padding(12)
-                                .background(LineyTheme.subtleFill, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                            }
-                        }
-
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack {
-                                Text(localized("settings.workspace.workflows"))
-                                    .font(.system(size: 12, weight: .semibold))
-                                Spacer()
-                                Button(localized("settings.workspace.addWorkflow")) {
-                                    workspaceSettings.workflows.append(
-                                        WorkspaceWorkflow(
-                                            name: localized("defaults.workflow.name"),
-                                            localSessionMode: .reuseFocused,
-                                            runSetupScript: !workspaceSettings.setupScript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                                            runWorkspaceScript: !workspaceSettings.runScript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                                            agentPresetID: appSettings.preferredAgentPresetID ?? appSettings.agentPresets.first?.id,
-                                            agentMode: appSettings.agentPresets.isEmpty ? .none : .splitRight
-                                        )
-                                    )
-                                }
-                            }
-
-                            if workspaceSettings.workflows.isEmpty {
-                                Text(localized("settings.workspace.workflowsHint"))
-                                    .font(.system(size: 11, weight: .medium))
-                                    .foregroundStyle(.secondary)
-                            }
-
-                            ForEach($workspaceSettings.workflows) { $workflow in
-                                VStack(alignment: .leading, spacing: 10) {
-                                    HStack {
-                                        TextField(localized("settings.workspace.workflow.name"), text: $workflow.name)
-                                        Button(role: .destructive) {
-                                            workspaceSettings.workflows.removeAll { $0.id == workflow.id }
-                                            if workspaceSettings.preferredWorkflowID == workflow.id {
-                                                workspaceSettings.preferredWorkflowID = workspaceSettings.workflows.first?.id
-                                            }
-                                        } label: {
-                                            Image(systemName: "trash")
-                                        }
-                                    }
-
-                                    Picker(localized("settings.workspace.workflow.localShell"), selection: $workflow.localSessionMode) {
-                                        ForEach(WorkspaceWorkflowLocalSessionMode.allCases) { mode in
-                                            Text(mode.title).tag(mode)
-                                        }
-                                    }
-
-                                    Toggle(localized("settings.workspace.workflow.runSetupScript"), isOn: $workflow.runSetupScript)
-                                    Toggle(localized("settings.workspace.workflow.runWorkspaceScript"), isOn: $workflow.runWorkspaceScript)
-
-                                    Picker(localized("settings.workspace.workflow.agentPreset"), selection: Binding(
-                                        get: { workflow.agentPresetID },
-                                        set: { workflow.agentPresetID = $0 }
-                                    )) {
-                                        Text(localized("settings.workspace.workflow.noAgent")).tag(Optional<UUID>.none)
-                                        ForEach(appSettings.agentPresets) { preset in
-                                            Text(preset.name).tag(Optional(preset.id))
-                                        }
-                                    }
-
-                                    Picker(localized("settings.workspace.workflow.agentLaunch"), selection: $workflow.agentMode) {
-                                        ForEach(WorkspaceWorkflowAgentMode.allCases) { mode in
-                                            Text(mode.title).tag(mode)
-                                        }
-                                    }
-                                }
-                                .padding(12)
-                                .background(LineyTheme.subtleFill, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                            }
-
-                            if !workspaceSettings.workflows.isEmpty {
-                                Picker(localized("settings.workspace.workflow.preferred"), selection: Binding(
-                                    get: { workspaceSettings.preferredWorkflowID ?? workspaceSettings.workflows.first?.id },
-                                    set: { workspaceSettings.preferredWorkflowID = $0 }
-                                )) {
-                                    ForEach(workspaceSettings.workflows) { workflow in
-                                        Text(workflow.name).tag(Optional(workflow.id))
-                                    }
-                                }
-                            }
-                        }
                 } else {
                     Text(localized("settings.workspace.emptyState"))
                         .font(.system(size: 12, weight: .medium))
@@ -1982,17 +1812,23 @@ struct SidebarIconCustomizationSheet: View {
             HStack {
                 Spacer()
                 if resetSupported {
-                    Button(localized("settings.sidebarIconCustomization.reset")) {
+                    Button {
                         store.resetSidebarIcon(for: request.target)
                         dismiss()
+                    } label: {
+                        Label(localized("settings.sidebarIconCustomization.reset"), systemImage: "arrow.counterclockwise")
                     }
                 }
-                Button(localized("settings.button.cancel")) {
+                Button {
                     dismiss()
+                } label: {
+                    Label(localized("settings.button.cancel"), systemImage: "xmark")
                 }
-                Button(localized("settings.button.save")) {
+                Button {
                     store.updateSidebarIcon(icon, for: request.target)
                     dismiss()
+                } label: {
+                    Label(localized("settings.button.save"), systemImage: "checkmark")
                 }
                 .buttonStyle(.borderedProminent)
             }

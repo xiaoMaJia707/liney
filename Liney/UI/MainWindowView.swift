@@ -207,34 +207,63 @@ struct MainWindowView: View {
                     leadingAction: { anchorView in
                         present(menu: makeQuickCommandMenu(), from: anchorView)
                     },
-                    trailingAction: { _ in
-                        store.presentQuickCommandEditor()
+                    trailingAction: { anchorView in
+                        present(menu: makeQuickCommandMenu(), from: anchorView)
                     },
                     isLeadingDisabled: false,
                     isTrailingDisabled: false,
-                    leadingAccessibilityLabel: localized("main.toolbar.insertQuickCommand"),
-                    leadingHelp: hasSelectedSession
-                        ? localized("main.toolbar.insertQuickCommandFocusedTerminal")
-                        : localized("main.toolbar.chooseQuickCommand"),
-                    trailingAccessibilityLabel: localized("main.toolbar.editQuickCommands"),
-                    trailingHelp: localized("main.toolbar.editQuickCommands"),
+                    leadingAccessibilityLabel: localized("main.toolbar.chooseQuickCommand"),
+                    leadingHelp: localized("main.toolbar.chooseQuickCommand"),
+                    trailingAccessibilityLabel: localized("main.toolbar.chooseQuickCommand"),
+                    trailingHelp: localized("main.toolbar.chooseQuickCommand"),
                     leadingContent: {
                         HStack(spacing: 6) {
                             ToolbarFeatureIcon(
                                 systemName: "chevron.left.slash.chevron.right",
                                 tint: LineyTheme.accent
                             )
-                            Image(systemName: "chevron.down")
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundStyle(LineyTheme.secondaryText)
                         }
                     },
                     trailingContent: {
-                        Image(systemName: "slider.horizontal.3")
-                            .font(.system(size: 11, weight: .semibold))
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 10, weight: .bold))
                             .foregroundStyle(LineyTheme.secondaryText)
                     }
                     )
+
+                    ToolbarSegmentedControl(
+                    backgroundColor: LineyTheme.chromeBackground.opacity(0.96),
+                    borderColor: LineyTheme.border,
+                    leadingAction: { anchorView in
+                        present(menu: makeWorkflowMenu(), from: anchorView)
+                    },
+                    trailingAction: { anchorView in
+                        present(menu: makeWorkflowMenu(), from: anchorView)
+                    },
+                    isLeadingDisabled: !hasSelectedWorkspace,
+                    isTrailingDisabled: !hasSelectedWorkspace,
+                    leadingAccessibilityLabel: localized("main.toolbar.chooseWorkflow"),
+                    leadingHelp: localized("main.toolbar.chooseWorkflow"),
+                    trailingAccessibilityLabel: localized("main.toolbar.chooseWorkflow"),
+                    trailingHelp: localized("main.toolbar.chooseWorkflow"),
+                    leadingContent: {
+                        HStack(spacing: 6) {
+                            ToolbarFeatureIcon(
+                                systemName: "play.rectangle.on.rectangle",
+                                tint: LineyTheme.accent
+                            )
+                        }
+                    },
+                    trailingContent: {
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(LineyTheme.secondaryText)
+                    }
+                    )
+
+                    if let hapiInstallation = availableHAPIInstallation, store.appSettings.showHAPIToolbarButton {
+                        hapiToolbarControl(using: hapiInstallation)
+                    }
 
                     ToolbarSegmentedControl(
                     backgroundColor: LineyTheme.chromeBackground.opacity(0.96),
@@ -266,10 +295,6 @@ struct MainWindowView: View {
                     }
                     )
 
-                    if let hapiInstallation = availableHAPIInstallation {
-                        hapiToolbarControl(using: hapiInstallation)
-                    }
-
                     ToolbarSegmentedControl(
                         backgroundColor: sleepPreventionSplitButtonBackground,
                         borderColor: sleepPreventionSplitButtonBorder,
@@ -297,6 +322,7 @@ struct MainWindowView: View {
                                 .foregroundStyle(LineyTheme.secondaryText)
                         }
                     )
+
                 }
                 .scaleEffect(uiScale)
                 Button {
@@ -409,13 +435,6 @@ struct MainWindowView: View {
                         store.dispatch(.runSetupScript(workspace.id))
                     }
                     .disabled(!(store.selectedWorkspace?.setupScript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false))
-
-                    Button(localized("main.menu.runPreferredWorkflow")) {
-                        guard let workspace = store.selectedWorkspace,
-                              let workflow = workspace.preferredWorkflow else { return }
-                        store.dispatch(.runWorkflow(workspace.id, workflow.id))
-                    }
-                    .disabled(store.selectedWorkspace?.preferredWorkflow == nil)
 
                     Divider()
 
@@ -559,6 +578,10 @@ struct MainWindowView: View {
         }
         .sheet(item: $store.quickCommandEditorRequest) { _ in
             QuickCommandEditorSheet()
+                .environmentObject(store)
+        }
+        .sheet(item: $store.workflowEditorRequest) { request in
+            WorkflowEditorSheet(workspaceID: request.workspaceID)
                 .environmentObject(store)
         }
 
@@ -711,6 +734,48 @@ struct MainWindowView: View {
 
         menu.addActionItem(title: localized("main.quickCommands.edit"), imageSystemName: "slider.horizontal.3") {
             store.presentQuickCommandEditor()
+        }
+
+        return menu
+    }
+
+    private func makeWorkflowMenu() -> NSMenu {
+        let menu = NSMenu()
+
+        guard let workspace = store.selectedWorkspace else {
+            menu.addDisabledItem(title: localized("main.workflows.noneConfigured"))
+            return menu
+        }
+
+        let workflows = workspace.workflows
+        if workflows.isEmpty {
+            menu.addDisabledItem(title: localized("main.workflows.noneConfigured"))
+        } else {
+            for workflow in workflows {
+                let commandCount = workflow.commands.count
+                let toolTip = commandCount > 0
+                    ? localizedFormat("main.workflows.commandCountFormat", commandCount)
+                    : nil
+                menu.addActionItem(
+                    title: workflow.name,
+                    imageSystemName: "play.rectangle.on.rectangle",
+                    isEnabled: true,
+                    toolTip: toolTip
+                ) {
+                    store.dispatch(.runWorkflow(workspace.id, workflow.id))
+                }
+            }
+        }
+
+        menu.addItem(.separator())
+        menu.addActionItem(title: localized("main.workflows.addWorkflow"), imageSystemName: "plus") {
+            workspace.settings.workflows.append(
+                WorkspaceWorkflow(name: localized("defaults.workflow.name"))
+            )
+            store.presentWorkflowEditor(for: workspace)
+        }
+        menu.addActionItem(title: localized("main.workflows.editWorkflows"), imageSystemName: "slider.horizontal.3") {
+            store.presentWorkflowEditor(for: workspace)
         }
 
         return menu

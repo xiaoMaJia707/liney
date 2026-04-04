@@ -462,6 +462,20 @@ enum WorkspaceWorkflowAgentMode: String, Codable, Hashable, CaseIterable, Identi
     }
 }
 
+struct WorkspaceWorkflowBatchCommand: Codable, Hashable, Identifiable {
+    var id: UUID
+    var name: String
+    var command: String
+    var splitAxis: PaneSplitAxis
+
+    init(id: UUID = UUID(), name: String = "", command: String = "", splitAxis: PaneSplitAxis = .vertical) {
+        self.id = id
+        self.name = name
+        self.command = command
+        self.splitAxis = splitAxis
+    }
+}
+
 struct WorkspaceWorkflow: Codable, Hashable, Identifiable {
     var id: UUID
     var name: String
@@ -470,6 +484,7 @@ struct WorkspaceWorkflow: Codable, Hashable, Identifiable {
     var runWorkspaceScript: Bool
     var agentPresetID: UUID?
     var agentMode: WorkspaceWorkflowAgentMode
+    var commands: [WorkspaceWorkflowBatchCommand]
 
     init(
         id: UUID = UUID(),
@@ -478,7 +493,8 @@ struct WorkspaceWorkflow: Codable, Hashable, Identifiable {
         runSetupScript: Bool = true,
         runWorkspaceScript: Bool = true,
         agentPresetID: UUID? = nil,
-        agentMode: WorkspaceWorkflowAgentMode = .none
+        agentMode: WorkspaceWorkflowAgentMode = .none,
+        commands: [WorkspaceWorkflowBatchCommand] = []
     ) {
         self.id = id
         self.name = name
@@ -487,6 +503,21 @@ struct WorkspaceWorkflow: Codable, Hashable, Identifiable {
         self.runWorkspaceScript = runWorkspaceScript
         self.agentPresetID = agentPresetID
         self.agentMode = agentMode
+        self.commands = commands
+    }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            id: try container.decode(UUID.self, forKey: .id),
+            name: try container.decode(String.self, forKey: .name),
+            localSessionMode: try container.decode(WorkspaceWorkflowLocalSessionMode.self, forKey: .localSessionMode),
+            runSetupScript: try container.decode(Bool.self, forKey: .runSetupScript),
+            runWorkspaceScript: try container.decode(Bool.self, forKey: .runWorkspaceScript),
+            agentPresetID: try container.decodeIfPresent(UUID.self, forKey: .agentPresetID),
+            agentMode: try container.decode(WorkspaceWorkflowAgentMode.self, forKey: .agentMode),
+            commands: try container.decodeIfPresent([WorkspaceWorkflowBatchCommand].self, forKey: .commands) ?? []
+        )
     }
 }
 

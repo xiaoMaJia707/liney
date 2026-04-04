@@ -537,30 +537,13 @@ private final class WorkspaceSidebarCoordinator: NSObject, NSOutlineViewDataSour
 
             // Dynamic actions at the top for quick access
             let hasRunScript = !workspace.runScript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            let hasWorkflows = !workspace.workflows.isEmpty
-            if hasRunScript || hasWorkflows {
-                if hasRunScript {
-                    addMenuItem(
-                        to: menu,
-                        title: localized("sidebar.menu.runWorkspaceScript"),
-                        action: #selector(runWorkspaceScript(_:)),
-                        representedObject: workspace.id
-                    )
-                }
-                if hasWorkflows {
-                    let workflowsItem = NSMenuItem(title: localized("sidebar.menu.runWorkflow"), action: nil, keyEquivalent: "")
-                    let workflowsMenu = NSMenu()
-                    for workflow in workspace.workflows {
-                        addMenuItem(
-                            to: workflowsMenu,
-                            title: workflow.name,
-                            action: #selector(runWorkflow(_:)),
-                            representedObject: SidebarActionWorkflow(workspaceID: workspace.id, workflowID: workflow.id)
-                        )
-                    }
-                    menu.setSubmenu(workflowsMenu, for: workflowsItem)
-                    menu.addItem(workflowsItem)
-                }
+            if hasRunScript {
+                addMenuItem(
+                    to: menu,
+                    title: localized("sidebar.menu.runWorkspaceScript"),
+                    action: #selector(runWorkspaceScript(_:)),
+                    representedObject: workspace.id
+                )
                 menu.addItem(.separator())
             }
 

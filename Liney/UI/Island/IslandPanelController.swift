@@ -34,11 +34,50 @@ final class IslandPanelController: NSObject, NSWindowDelegate {
     /// The screen the island is pinned to. Defaults to the primary screen.
     private(set) var pinnedScreen: NSScreen?
 
-    private let collapsedHeight: CGFloat = 32
     private let collapsedMinWidth: CGFloat = 120
-    private let collapsedMaxWidth: CGFloat = 320
-    private let expandedWidth: CGFloat = 360
+
+    private var widthPreset: IslandWidthPreset {
+        workspaceStore?.appSettings.dynamicIslandWidth ?? .standard
+    }
+
+    private var heightPreset: IslandHeightPreset {
+        workspaceStore?.appSettings.dynamicIslandHeight ?? .notch
+    }
+
+    /// Detect notch dimensions on the pinned screen.
+    /// Returns (width, height) of the notch, or (0, 0) if no notch.
+    private var notchSize: (width: CGFloat, height: CGFloat) {
+        guard let screen = pinnedScreen ?? NSScreen.screens.first else {
+            return (0, 0)
+        }
+        let topInset = screen.safeAreaInsets.top
+        guard topInset > 0 else { return (0, 0) }
+        // Notch width = screen width minus the two auxiliary top areas
+        let auxLeft = screen.auxiliaryTopLeftArea?.width ?? 0
+        let auxRight = screen.auxiliaryTopRightArea?.width ?? 0
+        let notchWidth = screen.frame.width - auxLeft - auxRight
+        return (max(notchWidth, 0), topInset)
+    }
+
+    private var hasNotch: Bool { notchSize.height > 0 }
+
+    /// Collapsed height from preset, or match notch height when present.
+    private var collapsedHeight: CGFloat {
+        let presetHeight = heightPreset.collapsedHeight
+        return hasNotch ? max(notchSize.height, presetHeight) : presetHeight
+    }
+
+    /// Minimum width that covers the notch with some padding.
+    private var notchAwareMinWidth: CGFloat {
+        hasNotch ? notchSize.width + 40 : 0
+    }
+
+    private var expandedWidth: CGFloat { max(400, collapsedMaxWidth) }
     private let expandedMaxHeight: CGFloat = 500
+
+    private var collapsedMaxWidth: CGFloat {
+        max(widthPreset.collapsedMaxWidth, notchAwareMinWidth)
+    }
 
     private override init() {
         super.init()
@@ -154,14 +193,12 @@ final class IslandPanelController: NSObject, NSWindowDelegate {
 
     private func collapsedWidth() -> CGFloat {
         if state.latestItem == nil {
-            // "Liney" + pixel animation — fixed width to prevent jitter
-            return 160
+            return collapsedMaxWidth
         }
 
         let font = NSFont.systemFont(ofSize: 13, weight: .medium)
         let title = state.latestItem!.title
         let textWidth = (title as NSString).size(withAttributes: [.font: font]).width
-        // icon(~14) + spacing(10) + text + spacing(4) + badge(~22) + horizontal padding(32)
         let hasBadge = state.badgeCount > 1
         let badgeWidth: CGFloat = hasBadge ? 26 : 0
         let totalWidth = 14 + 10 + textWidth + 4 + badgeWidth + 32
@@ -212,8 +249,7 @@ final class IslandPanelController: NSObject, NSWindowDelegate {
         }
         let mouseLocation = NSEvent.mouseLocation
         let panelFrame = panel.frame
-        let hitArea = panelFrame.insetBy(dx: -20, dy: -20)
-        let isInside = hitArea.contains(mouseLocation)
+        let isInside = panelFrame.contains(mouseLocation)
 
         if isInside {
             // Mouse entered — cancel any pending collapse, schedule expand

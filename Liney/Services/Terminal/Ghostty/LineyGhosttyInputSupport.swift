@@ -89,6 +89,8 @@ enum LineyGhosttyTextInputCommandAction: Equatable {
     case cancelMarkedText
     case moveBackwardWord
     case moveForwardWord
+    case deleteWordBackward
+    case deleteWordForward
 
     static func resolve(selector: Selector, hasMarkedText: Bool) -> Self {
         switch selector {
@@ -100,6 +102,10 @@ enum LineyGhosttyTextInputCommandAction: Equatable {
             return .moveBackwardWord
         case #selector(NSResponder.moveWordRight(_:)):
             return .moveForwardWord
+        case #selector(NSResponder.deleteWordBackward(_:)):
+            return .deleteWordBackward
+        case #selector(NSResponder.deleteWordForward(_:)):
+            return .deleteWordForward
         case #selector(NSResponder.deleteBackward(_:)),
              #selector(NSResponder.deleteBackwardByDecomposingPreviousCharacter(_:)):
             return hasMarkedText ? .deleteBackwardInMarkedText : .none
@@ -357,6 +363,30 @@ func lineyGhosttySSHWordNavigationEscapeSequence(
         return "\u{1B}b"
     case UInt16(kVK_RightArrow):
         return "\u{1B}f"
+    default:
+        return nil
+    }
+}
+
+/// Option+Delete escape sequence for "delete word backward".
+/// Works for all backend types (local shell, SSH, agent).
+func lineyGhosttyOptionDeleteEscapeSequence(
+    keyCode: UInt16,
+    modifierFlags: NSEvent.ModifierFlags
+) -> String? {
+    let relevantModifiers = lineyGhosttyRelevantModifierFlags(modifierFlags)
+    guard relevantModifiers.contains(.option),
+          !relevantModifiers.contains(.command),
+          !relevantModifiers.contains(.control),
+          !relevantModifiers.contains(.shift) else {
+        return nil
+    }
+
+    switch keyCode {
+    case UInt16(kVK_Delete):
+        return "\u{1B}\u{7F}"
+    case UInt16(kVK_ForwardDelete):
+        return "\u{1B}[3;3~"
     default:
         return nil
     }

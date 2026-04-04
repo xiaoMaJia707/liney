@@ -885,6 +885,12 @@ private final class LineyGhosttySurfaceView: NSView {
             return
         }
 
+        if lineyGhosttyOptionDeleteEscapeSequence(keyCode: event.keyCode, modifierFlags: event.modifierFlags) != nil {
+            logArrowKeyDebug(event, phase: "keyDown option-delete")
+            sendOptionDelete(keyCode: event.keyCode, on: surface)
+            return
+        }
+
         if let escapeSequence = lineyGhosttySSHWordNavigationEscapeSequence(
             keyCode: event.keyCode,
             modifierFlags: event.modifierFlags,
@@ -989,6 +995,11 @@ private final class LineyGhosttySurfaceView: NSView {
         }
         guard let surface else { return false }
 
+        if lineyGhosttyOptionDeleteEscapeSequence(keyCode: event.keyCode, modifierFlags: event.modifierFlags) != nil {
+            sendOptionDelete(keyCode: event.keyCode, on: surface)
+            return true
+        }
+
         if let escapeSequence = lineyGhosttySSHWordNavigationEscapeSequence(
             keyCode: event.keyCode,
             modifierFlags: event.modifierFlags,
@@ -998,14 +1009,14 @@ private final class LineyGhosttySurfaceView: NSView {
             return true
         }
 
-        if hasMarkedText(),
-           !event.modifierFlags.intersection(.deviceIndependentFlagsMask).contains(.command) {
-            return false
-        }
-
         if shouldPreferRawKeyEvent(for: event) {
             keyDown(with: event)
             return true
+        }
+
+        if hasMarkedText(),
+           !event.modifierFlags.intersection(.deviceIndependentFlagsMask).contains(.command) {
+            return false
         }
 
         let flags = bindingFlags(for: event, on: surface)
@@ -1108,6 +1119,22 @@ private final class LineyGhosttySurfaceView: NSView {
             guard backendConfiguration.kind == .ssh else { break }
             handledTextInputCommand = true
             sendSSHWordNavigation("\u{1B}f")
+        case .deleteWordBackward:
+            handledTextInputCommand = true
+            if hasMarkedText() {
+                unmarkText()
+            }
+            if let surface {
+                sendOptionDelete(keyCode: UInt16(kVK_Delete), on: surface)
+            }
+        case .deleteWordForward:
+            handledTextInputCommand = true
+            if hasMarkedText() {
+                unmarkText()
+            }
+            if let surface {
+                sendOptionDelete(keyCode: UInt16(kVK_ForwardDelete), on: surface)
+            }
         case .deleteBackwardInMarkedText:
             handledTextInputCommand = true
             deleteBackwardInMarkedText()
@@ -1400,6 +1427,28 @@ private final class LineyGhosttySurfaceView: NSView {
         default:
             sendText(sequence)
         }
+    }
+
+    private func sendOptionDelete(keyCode: UInt16, on surface: ghostty_surface_t) {
+        var press = ghostty_input_key_s()
+        press.action = GHOSTTY_ACTION_PRESS
+        press.mods = GHOSTTY_MODS_ALT
+        press.consumed_mods = GHOSTTY_MODS_NONE
+        press.keycode = UInt32(keyCode)
+        press.text = nil
+        press.unshifted_codepoint = keyCode == UInt16(kVK_Delete) ? 0x7F : 0
+        press.composing = false
+        _ = ghostty_surface_key(surface, press)
+
+        var release = ghostty_input_key_s()
+        release.action = GHOSTTY_ACTION_RELEASE
+        release.mods = GHOSTTY_MODS_ALT
+        release.consumed_mods = GHOSTTY_MODS_NONE
+        release.keycode = UInt32(keyCode)
+        release.text = nil
+        release.unshifted_codepoint = keyCode == UInt16(kVK_Delete) ? 0x7F : 0
+        release.composing = false
+        _ = ghostty_surface_key(surface, release)
     }
 
     private func sendSSHMetaLetter(_ character: Character, keyCode: UInt16, on surface: ghostty_surface_t) {
