@@ -225,6 +225,9 @@ private final class WorkspaceSidebarCoordinator: NSObject, NSOutlineViewDataSour
                 .joined(separator: "|")
             )
         }
+        let archivedIDs = store?.archivedWorkspaces.map(\.id.uuidString).joined(separator: ",") ?? ""
+        parts.append("archived:\(archivedIDs)")
+        parts.append("showArchived:\(store?.appSettings.showArchivedWorkspaces.description ?? "nil")")
         for ws in workspaces {
                 parts.append("\(ws.id)|\(ws.name)|\(ws.currentBranch)|\(ws.activeWorktreePath)|\(ws.hasUncommittedChanges)|\(ws.changedFileCount)|\(ws.aheadCount)|\(ws.behindCount)|\(ws.worktrees.count)|\(ws.activeSessionCount)|\(ws.isPinned)|\(ws.isArchived)|\(ws.workspaceIconOverride?.symbolName ?? "-")|\(ws.workspaceIconOverride?.palette.rawValue ?? "-")|\(ws.workspaceIconOverride?.fillStyle.rawValue ?? "-")|\(ws.runScript)|\(ws.workflows.map(\.name).joined(separator: ","))")
                 for wt in ws.worktrees {
@@ -1293,6 +1296,7 @@ private final class WorkspaceSidebarCoordinator: NSObject, NSOutlineViewDataSour
                 let rootOrder = store?.effectiveSidebarRootOrder() ?? []
                 let targetIndex = index == -1 ? rootOrder.count : index
                 store?.moveSidebarRootItem(.group(groupID), toIndex: targetIndex)
+                reloadAfterDrop()
                 return true
             }
 
@@ -1307,6 +1311,7 @@ private final class WorkspaceSidebarCoordinator: NSObject, NSOutlineViewDataSour
 
             if let node = item as? SidebarNodeItem, node.isArchiveGroupNode {
                 store?.setWorkspacesArchived(ids, archived: true)
+                reloadAfterDrop()
                 return true
             }
 
@@ -1314,6 +1319,7 @@ private final class WorkspaceSidebarCoordinator: NSObject, NSOutlineViewDataSour
                 // Unarchive if needed before moving into a group
                 store?.setWorkspacesArchived(ids, archived: false)
                 store?.moveWorkspacesIntoGroup(ids: ids, groupID: group.id, atIndex: index == -1 ? group.workspaceIDs.count : index)
+                reloadAfterDrop()
                 return true
             }
 
@@ -1323,7 +1329,27 @@ private final class WorkspaceSidebarCoordinator: NSObject, NSOutlineViewDataSour
             let rootOrder = store?.effectiveSidebarRootOrder() ?? []
             let targetIndex = index == -1 ? rootOrder.count : index
             store?.moveSidebarRootItems(ids.map { .workspace($0) }, toIndex: targetIndex)
+            reloadAfterDrop()
             return true
+        }
+
+        private func reloadAfterDrop() {
+            DispatchQueue.main.async { [weak self] in
+                guard let self, let store = self.store, let outlineView = self.container?.outlineView else { return }
+                let workspaces = store.sidebarWorkspaces
+                let fingerprint = self.dataFingerprint(workspaces: workspaces, query: self.currentQuery)
+                self.lastDataFingerprint = fingerprint
+                self.rootNodes = self.buildNodes(from: workspaces)
+                self.nodeLookup = Dictionary(uniqueKeysWithValues: self.rootNodes.flatMap { $0.flattened() }.map { ($0.id, $0) })
+                self.isApplyingSelection = true
+                self.container?.reloadOutlineData()
+                self.isRestoringExpansion = true
+                self.restoreExpansionState(on: outlineView)
+                self.isRestoringExpansion = false
+                self.container?.relayout()
+                self.isApplyingSelection = false
+                self.synchronizeSelection(on: outlineView, selectedWorkspaceID: store.selectedWorkspaceID)
+            }
         }
 }
 

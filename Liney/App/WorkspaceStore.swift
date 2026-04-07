@@ -831,9 +831,12 @@ final class WorkspaceStore: ObservableObject {
             uiScale: settings.uiScale,
             terminalFontFamily: settings.terminalFontFamily,
             terminalFontSize: settings.terminalFontSize,
+            terminalTheme: settings.terminalTheme,
+            terminalScrollbackLines: settings.terminalScrollbackLines,
             sidebarShowsSecondaryLabels: settings.sidebarShowsSecondaryLabels,
             sidebarShowsWorkspaceBadges: settings.sidebarShowsWorkspaceBadges,
             sidebarShowsWorktreeBadges: settings.sidebarShowsWorktreeBadges,
+            sidebarActivityIndicatorPalette: settings.sidebarActivityIndicatorPalette,
             defaultRepositoryIcon: settings.defaultRepositoryIcon,
             defaultLocalTerminalIcon: settings.defaultLocalTerminalIcon,
             defaultWorktreeIcon: settings.defaultWorktreeIcon,
@@ -847,6 +850,8 @@ final class WorkspaceStore: ObservableObject {
             preferredAgentPresetID: settings.preferredAgentPresetID,
             sshPresets: settings.sshPresets,
             preferredSSHPresetID: settings.preferredSSHPresetID,
+            workspaceGroups: settings.workspaceGroups,
+            sidebarRootOrder: settings.sidebarRootOrder,
             keyboardShortcutOverrides: settings.keyboardShortcutOverrides
         )
         LocalizationManager.shared.updateSelectedLanguage(appSettings.appLanguage)
@@ -1346,20 +1351,25 @@ final class WorkspaceStore: ObservableObject {
     }
 
     func setWorkspacesArchived(_ ids: [UUID], archived: Bool) {
+        var changed = false
         for id in ids {
             guard let workspace = workspace(for: id) else { continue }
-            let wasArchived = workspace.isArchived
+            guard workspace.isArchived != archived else { continue }
             workspace.isArchived = archived
+            changed = true
             if archived {
                 removeWorkspacesFromAllGroups(ids: [id])
                 if selectedWorkspaceID == id {
                     selectedWorkspaceID = sidebarWorkspaces.first(where: { $0.id != id })?.id
                 }
-            } else if wasArchived {
+            } else {
                 workspace.bootstrapIfNeeded()
             }
         }
-        persist()
+        if changed {
+            objectWillChange.send()
+            persist()
+        }
     }
 
     func isWorkspaceGroupExpanded(_ groupID: UUID) -> Bool {
@@ -2384,6 +2394,7 @@ final class WorkspaceStore: ObservableObject {
                 if wasArchived, !workspace.isArchived {
                     workspace.bootstrapIfNeeded()
                 }
+                objectWillChange.send()
                 persist()
             }
 
