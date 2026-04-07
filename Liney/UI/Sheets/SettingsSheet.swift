@@ -32,6 +32,7 @@ private enum SettingsSheetSection: String, CaseIterable, Identifiable {
     case hotKeyWindow
     case externalEditor
     case terminal
+    case theme
     case sidebar
     case dynamicIsland
     case shortcuts
@@ -44,7 +45,7 @@ private enum SettingsSheetSection: String, CaseIterable, Identifiable {
 
     var group: SettingsSidebarGroup {
         switch self {
-        case .general, .hotKeyWindow, .externalEditor, .terminal, .updates:
+        case .general, .hotKeyWindow, .externalEditor, .terminal, .theme, .updates:
             return .app
         case .sidebar, .dynamicIsland, .shortcuts:
             return .customize
@@ -63,6 +64,8 @@ private enum SettingsSheetSection: String, CaseIterable, Identifiable {
             return "settings.section.externalEditor.title"
         case .terminal:
             return "settings.section.terminal.title"
+        case .theme:
+            return "settings.section.theme.title"
         case .sidebar:
             return "settings.section.sidebar.title"
         case .dynamicIsland:
@@ -90,6 +93,8 @@ private enum SettingsSheetSection: String, CaseIterable, Identifiable {
             return "settings.section.externalEditor.subtitle"
         case .terminal:
             return "settings.section.terminal.subtitle"
+        case .theme:
+            return "settings.section.theme.subtitle"
         case .sidebar:
             return "settings.section.sidebar.subtitle"
         case .dynamicIsland:
@@ -117,6 +122,8 @@ private enum SettingsSheetSection: String, CaseIterable, Identifiable {
             return "square.and.arrow.up"
         case .terminal:
             return "terminal"
+        case .theme:
+            return "paintpalette"
         case .sidebar:
             return "sidebar.leading"
         case .dynamicIsland:
@@ -309,6 +316,75 @@ enum LineyGhosttyThemeCatalog {
         }
 
         return directories
+    }
+
+    static func findThemeFile(named name: String) -> String? {
+        for directory in themeSearchDirectories() {
+            let path = (directory as NSString).appendingPathComponent(name)
+            if FileManager.default.fileExists(atPath: path) {
+                return path
+            }
+        }
+        return nil
+    }
+
+    static func loadThemeColors(name: String) -> GhosttyThemeColors? {
+        guard !name.isEmpty, let path = findThemeFile(named: name),
+              let contents = try? String(contentsOfFile: path, encoding: .utf8) else {
+            return nil
+        }
+        var bg: Color?
+        var fg: Color?
+        var palette = [Int: Color]()
+        for line in contents.components(separatedBy: .newlines) {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard !trimmed.hasPrefix("#"), !trimmed.isEmpty else { continue }
+            let parts = trimmed.split(separator: "=", maxSplits: 1).map {
+                $0.trimmingCharacters(in: .whitespaces)
+            }
+            guard parts.count == 2 else { continue }
+            let key = parts[0]
+            let value = parts[1]
+            if key == "background" {
+                bg = colorFromHex(value)
+            } else if key == "foreground" {
+                fg = colorFromHex(value)
+            } else if key.hasPrefix("palette") {
+                // "palette = 0=#45475a"  →  key="palette", value="0=#45475a"
+                let paletteParts = value.split(separator: "=", maxSplits: 1).map {
+                    $0.trimmingCharacters(in: .whitespaces)
+                }
+                if paletteParts.count == 2, let index = Int(paletteParts[0]) {
+                    palette[index] = colorFromHex(paletteParts[1])
+                }
+            }
+        }
+        guard bg != nil || fg != nil else { return nil }
+        return GhosttyThemeColors(
+            background: bg ?? Color.black,
+            foreground: fg ?? Color.white,
+            palette: palette
+        )
+    }
+
+    private static func colorFromHex(_ hex: String) -> Color? {
+        var h = hex.trimmingCharacters(in: .whitespaces)
+        if h.hasPrefix("#") { h = String(h.dropFirst()) }
+        guard h.count == 6, let val = UInt64(h, radix: 16) else { return nil }
+        let r = Double((val >> 16) & 0xFF) / 255.0
+        let g = Double((val >> 8) & 0xFF) / 255.0
+        let b = Double(val & 0xFF) / 255.0
+        return Color(red: r, green: g, blue: b)
+    }
+}
+
+struct GhosttyThemeColors {
+    let background: Color
+    let foreground: Color
+    let palette: [Int: Color]  // ANSI 0-15
+
+    func ansi(_ index: Int) -> Color {
+        palette[index] ?? foreground
     }
 }
 
@@ -503,6 +579,8 @@ struct SettingsSheet: View {
             externalEditorSettingsView
         case .terminal:
             terminalSettingsView
+        case .theme:
+            themeSettingsView
         case .sidebar:
             sidebarSettingsView
         case .dynamicIsland:
@@ -656,65 +734,6 @@ struct SettingsSheet: View {
         HStack(alignment: .top, spacing: 20) {
             GroupBox(localized("settings.general.terminal.group")) {
                 VStack(alignment: .leading, spacing: 14) {
-                    Toggle(localized("settings.general.terminal.useCustomTheme"), isOn: terminalThemeEnabledBinding)
-
-                    if appSettings.terminalTheme != nil {
-                        TextField(
-                            localized("settings.general.terminal.themeName"),
-                            text: terminalThemeBinding
-                        )
-                        .textFieldStyle(.roundedBorder)
-
-                        if allTerminalThemes.isEmpty {
-                            Text(localized("settings.general.terminal.themeUnavailable"))
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundStyle(.secondary)
-                        } else {
-                            TextField(
-                                localized("settings.general.terminal.themeSearchPlaceholder"),
-                                text: $terminalThemeSearchText
-                            )
-                            .textFieldStyle(.roundedBorder)
-
-                            Text(
-                                localizedFormat(
-                                    "settings.general.terminal.availableThemesFormat",
-                                    terminalThemeSummaryCount,
-                                    allTerminalThemes.count
-                                )
-                            )
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundStyle(.secondary)
-
-                            ScrollView {
-                                LazyVStack(alignment: .leading, spacing: 8) {
-                                    ForEach(filteredTerminalThemes, id: \.self) { theme in
-                                        TerminalThemeOptionRow(
-                                            name: theme,
-                                            isSelected: terminalThemeBinding.wrappedValue == theme
-                                        ) {
-                                            terminalThemeBinding.wrappedValue = theme
-                                        }
-                                    }
-                                }
-                                .padding(.vertical, 2)
-                            }
-                            .frame(height: 240)
-
-                            if filteredTerminalThemes.isEmpty {
-                                Text(localized("settings.general.terminal.noThemeSearchResults"))
-                                    .font(.system(size: 11, weight: .medium))
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-
-                        Text(localized("settings.general.terminal.themeHint"))
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Divider()
-
                     Toggle(localized("settings.general.terminal.useCustomFont"), isOn: terminalFontFamilyEnabledBinding)
 
                     if appSettings.terminalFontFamily != nil {
@@ -822,6 +841,82 @@ struct SettingsSheet: View {
                 defaultFamilyLabel: localized("settings.general.terminal.defaultFontLabel"),
                 customSizeFormat: localized("settings.general.terminal.customSizeFormat"),
                 defaultSizeFormat: localized("settings.general.terminal.defaultSizeFormat")
+            )
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+        }
+    }
+
+    private var themeSettingsView: some View {
+        HStack(alignment: .top, spacing: 20) {
+            GroupBox(localized("settings.section.theme.group")) {
+                VStack(alignment: .leading, spacing: 14) {
+                    Toggle(localized("settings.general.terminal.useCustomTheme"), isOn: terminalThemeEnabledBinding)
+
+                    if appSettings.terminalTheme != nil {
+                        TextField(
+                            localized("settings.general.terminal.themeName"),
+                            text: terminalThemeBinding
+                        )
+                        .textFieldStyle(.roundedBorder)
+
+                        if allTerminalThemes.isEmpty {
+                            Text(localized("settings.general.terminal.themeUnavailable"))
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(.secondary)
+                        } else {
+                            TextField(
+                                localized("settings.general.terminal.themeSearchPlaceholder"),
+                                text: $terminalThemeSearchText
+                            )
+                            .textFieldStyle(.roundedBorder)
+
+                            Text(
+                                localizedFormat(
+                                    "settings.general.terminal.availableThemesFormat",
+                                    terminalThemeSummaryCount,
+                                    allTerminalThemes.count
+                                )
+                            )
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(.secondary)
+
+                            ScrollView {
+                                LazyVStack(alignment: .leading, spacing: 8) {
+                                    ForEach(filteredTerminalThemes, id: \.self) { theme in
+                                        TerminalThemeOptionRow(
+                                            name: theme,
+                                            isSelected: terminalThemeBinding.wrappedValue == theme
+                                        ) {
+                                            terminalThemeBinding.wrappedValue = theme
+                                        }
+                                    }
+                                }
+                                .padding(.vertical, 2)
+                            }
+                            .frame(maxHeight: .infinity)
+
+                            if filteredTerminalThemes.isEmpty {
+                                Text(localized("settings.general.terminal.noThemeSearchResults"))
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+
+                        Text(localized("settings.general.terminal.themeHint"))
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.top, 8)
+            }
+            .frame(maxWidth: 420, alignment: .topLeading)
+
+            TerminalThemePreviewCard(
+                themeName: appSettings.terminalTheme,
+                colors: appSettings.terminalTheme.flatMap {
+                    LineyGhosttyThemeCatalog.loadThemeColors(name: $0)
+                },
+                localized: localized
             )
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
@@ -1540,6 +1635,106 @@ private struct TerminalFontOptionRow: View {
             )
         }
         .buttonStyle(.plain)
+    }
+}
+
+private struct TerminalThemePreviewCard: View {
+    let themeName: String?
+    let colors: GhosttyThemeColors?
+    let localized: (String) -> String
+
+    private var displayName: String {
+        if let name = themeName, !name.isEmpty { return name }
+        return "Ghostty Default"
+    }
+
+    var body: some View {
+        GroupBox(localized("settings.section.theme.preview")) {
+            VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(displayName)
+                        .font(.system(size: 14, weight: .semibold))
+                    Text(localized("settings.section.theme.previewSubtitle"))
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.secondary)
+                }
+
+                if let colors {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Last login: Sat Mar 27 12:03 on ttys004")
+                            .foregroundStyle(colors.foreground.opacity(0.6))
+                        Text("liney % ssh dev@example.com")
+                            .foregroundStyle(colors.ansi(2))
+                        Text("dev@example.com % git status --short")
+                            .foregroundStyle(colors.foreground)
+                        Text(" M Liney/UI/Sheets/SettingsSheet.swift")
+                            .foregroundStyle(colors.ansi(3))
+                        Text("dev@example.com % echo \"0123456789 -> []{}()\"")
+                            .foregroundStyle(colors.ansi(2))
+                        Text("0123456789 -> []{}()")
+                            .foregroundStyle(colors.foreground.opacity(0.6))
+                    }
+                    .font(.system(size: 13, weight: .regular, design: .monospaced))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(18)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(colors.background)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.08))
+                    )
+
+                    // ANSI color palette swatches
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(localized("settings.section.theme.palette"))
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(.secondary)
+                        HStack(spacing: 4) {
+                            ForEach(0..<8, id: \.self) { i in
+                                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                                    .fill(colors.ansi(i))
+                                    .frame(height: 24)
+                            }
+                        }
+                        HStack(spacing: 4) {
+                            ForEach(8..<16, id: \.self) { i in
+                                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                                    .fill(colors.ansi(i))
+                                    .frame(height: 24)
+                            }
+                        }
+                    }
+                } else {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Last login: Sat Mar 27 12:03 on ttys004")
+                            .foregroundStyle(.secondary)
+                        Text("liney % ssh dev@example.com")
+                            .foregroundStyle(.green)
+                        Text("dev@example.com % git status --short")
+                        Text(" M Liney/UI/Sheets/SettingsSheet.swift")
+                            .foregroundStyle(.orange)
+                        Text("dev@example.com % echo \"0123456789 -> []{}()\"")
+                        Text("0123456789 -> []{}()")
+                            .foregroundStyle(.secondary)
+                    }
+                    .font(.system(size: 13, weight: .regular, design: .monospaced))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(18)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(Color.black.opacity(0.28))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.08))
+                    )
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, 8)
+        }
     }
 }
 
