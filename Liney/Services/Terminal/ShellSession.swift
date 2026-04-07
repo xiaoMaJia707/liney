@@ -435,6 +435,7 @@ enum TerminalWorkspaceAction {
     case equalizeSplits
     case togglePaneZoom
     case closePane
+    case desktopNotification(title: String)
 }
 
 nonisolated struct LineyTerminalManagedProcessMetadata: Equatable {

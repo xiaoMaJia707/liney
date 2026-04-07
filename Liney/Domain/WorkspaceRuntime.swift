@@ -875,6 +875,21 @@ final class WorkspaceModel: ObservableObject, Identifiable {
             toggleZoom(on: paneID)
         case .closePane:
             closePane(paneID)
+        case .desktopNotification(let title):
+            let item = IslandNotificationItem(
+                id: UUID(),
+                workspaceID: id,
+                worktreePath: activeWorktreePath,
+                title: title,
+                agentName: nil,
+                terminalTag: nil,
+                status: .running,
+                startedAt: Date(),
+                body: nil,
+                prompt: nil
+            )
+            IslandNotificationState.shared.post(item: item)
+            IslandPanelController.shared.show()
         }
     }
 }

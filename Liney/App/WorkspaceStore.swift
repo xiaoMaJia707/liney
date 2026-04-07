@@ -2496,7 +2496,7 @@ final class WorkspaceStore: ObservableObject {
                 // Dynamic Island takes priority — skip toast and system notification
                 let item = IslandNotificationItem(
                     id: UUID(),
-                    workspaceID: workspaceID ?? UUID(),
+                    workspaceID: workspaceID ?? selectedWorkspace?.id ?? UUID(),
                     worktreePath: worktreePath,
                     title: text,
                     agentName: nil,

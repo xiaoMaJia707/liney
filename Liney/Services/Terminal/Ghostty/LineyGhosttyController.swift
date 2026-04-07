@@ -187,21 +187,7 @@ final class LineyGhosttyController: ManagedTerminalSessionSurfaceController {
             let body = action.action.desktop_notification.body.map(String.init(cString:))
             let islandEnabled = IslandPanelController.shared.workspaceStore?.appSettings.dynamicIslandEnabled == true
             if islandEnabled {
-                // Dynamic Island takes priority — skip system notification
-                let item = IslandNotificationItem(
-                    id: UUID(),
-                    workspaceID: UUID(),
-                    worktreePath: nil,
-                    title: body ?? title,
-                    agentName: nil,
-                    terminalTag: nil,
-                    status: .running,
-                    startedAt: Date(),
-                    body: nil,
-                    prompt: nil
-                )
-                IslandNotificationState.shared.post(item: item)
-                IslandPanelController.shared.show()
+                onWorkspaceAction?(.desktopNotification(title: body ?? title))
             } else {
                 LineyGhosttyNotificationCenter.shared.deliver(title: title, body: body)
             }
