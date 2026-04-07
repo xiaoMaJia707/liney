@@ -42,6 +42,8 @@ struct CreateWorktreeRequest {
 actor GitRepositoryService {
     private let runner = ShellCommandRunner()
 
+    private static let inspectTimeout: TimeInterval = 10
+
     func inspectRepository(at path: String, repositoryRoot: String? = nil) async throws -> RepositorySnapshot {
         let rootPath: String
         if let repositoryRoot {
@@ -68,18 +70,30 @@ actor GitRepositoryService {
             throw inspectionError(path: path, step: "Read HEAD commit", underlying: error)
         }
 
+        // Worktree listing and status can be slow on large repos — use timeouts
+        // and degrade gracefully so the workspace still opens.
         let worktrees: [WorktreeModel]
         do {
-            worktrees = try await listWorktrees(for: rootPath)
+            worktrees = try await listWorktrees(for: rootPath, timeout: Self.inspectTimeout)
+        } catch is ShellCommandError {
+            worktrees = [WorktreeModel(path: rootPath, branch: branch, head: head, isMainWorktree: true, isLocked: false)]
         } catch {
             throw inspectionError(path: path, step: "List worktrees", underlying: error)
         }
 
         let status: RepositoryStatusSnapshot
         do {
-            status = try await repositoryStatus(for: path)
+            status = try await repositoryStatus(for: path, timeout: Self.inspectTimeout)
         } catch {
-            throw inspectionError(path: path, step: "Read repository status", underlying: error)
+            // Status is non-critical — open with empty status and refresh later
+            status = RepositoryStatusSnapshot(
+                hasUncommittedChanges: false,
+                changedFileCount: 0,
+                aheadCount: 0,
+                behindCount: 0,
+                localBranches: [],
+                remoteBranches: []
+            )
         }
 
         return RepositorySnapshot(
@@ -146,11 +160,11 @@ actor GitRepositoryService {
         return Self.parseRemoteBranchList(result.stdout)
     }
 
-    func repositoryStatus(for path: String) async throws -> RepositoryStatusSnapshot {
-        async let dirtyResult = git(arguments: ["status", "--porcelain"], currentDirectory: path)
-        async let upstreamResult = git(arguments: ["rev-list", "--left-right", "--count", "@{upstream}...HEAD"], currentDirectory: path)
-        async let localBranchesResult = git(arguments: ["for-each-ref", "--format=%(refname:short)", "refs/heads"], currentDirectory: path)
-        async let remoteBranchesResult = git(arguments: ["for-each-ref", "--format=%(refname:short)", "refs/remotes"], currentDirectory: path)
+    func repositoryStatus(for path: String, timeout: TimeInterval? = nil) async throws -> RepositoryStatusSnapshot {
+        async let dirtyResult = git(arguments: ["status", "--porcelain"], currentDirectory: path, timeout: timeout)
+        async let upstreamResult = git(arguments: ["rev-list", "--left-right", "--count", "@{upstream}...HEAD"], currentDirectory: path, timeout: timeout)
+        async let localBranchesResult = git(arguments: ["for-each-ref", "--format=%(refname:short)", "refs/heads"], currentDirectory: path, timeout: timeout)
+        async let remoteBranchesResult = git(arguments: ["for-each-ref", "--format=%(refname:short)", "refs/remotes"], currentDirectory: path, timeout: timeout)
 
         let dirty = try await dirtyResult
         let upstream = try await upstreamResult
@@ -275,8 +289,8 @@ actor GitRepositoryService {
         }
     }
 
-    func listWorktrees(for rootPath: String) async throws -> [WorktreeModel] {
-        let result = try await git(arguments: ["worktree", "list", "--porcelain"], currentDirectory: rootPath)
+    func listWorktrees(for rootPath: String, timeout: TimeInterval? = nil) async throws -> [WorktreeModel] {
+        let result = try await git(arguments: ["worktree", "list", "--porcelain"], currentDirectory: rootPath, timeout: timeout)
         guard result.exitCode == 0 else {
             throw GitServiceError.commandFailed(result.stderr.nonEmptyOrFallback("Unable to list worktrees."))
         }
@@ -359,8 +373,17 @@ actor GitRepositoryService {
         }
     }
 
-    private func git(arguments: [String], currentDirectory: String) async throws -> ShellCommandResult {
-        try await runner.run(
+    private func git(arguments: [String], currentDirectory: String, timeout: TimeInterval? = nil) async throws -> ShellCommandResult {
+        if let timeout {
+            return try await runner.run(
+                executable: "/usr/bin/env",
+                arguments: ["git"] + arguments,
+                currentDirectory: currentDirectory,
+                environment: ["LC_ALL": "en_US.UTF-8"],
+                timeout: timeout
+            )
+        }
+        return try await runner.run(
             executable: "/usr/bin/env",
             arguments: ["git"] + arguments,
             currentDirectory: currentDirectory,
