@@ -163,6 +163,7 @@ struct TerminalPaneView: View {
             }
         }
         .onAppear {
+            session.startIfNeeded()
             syncSearchState(with: session.surfaceStatus.searchQuery)
             scheduleAutoCloseIfNeeded()
         }

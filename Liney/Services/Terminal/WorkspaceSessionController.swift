@@ -68,9 +68,8 @@ final class WorkspaceSessionController: ObservableObject {
             sessions.removeValue(forKey: removed)
         }
 
-        for paneID in paneIDs {
-            sessions[paneID]?.startIfNeeded()
-        }
+        // Terminal processes are started lazily when their view appears,
+        // so we don't call startIfNeeded() here.
 
         if focusedPaneID == nil || focusedPaneID.map({ wanted.contains($0) }) == false {
             focusedPaneID = paneIDs.first
