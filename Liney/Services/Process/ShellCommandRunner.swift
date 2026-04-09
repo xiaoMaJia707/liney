@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import os
 
 struct ShellCommandResult {
     var stdout: String
@@ -28,6 +29,11 @@ enum ShellCommandError: LocalizedError {
             return "Command timed out after \(Int(seconds)) seconds"
         }
     }
+
+    var isTimeout: Bool {
+        if case .timedOut = self { return true }
+        return false
+    }
 }
 
 actor ShellCommandRunner {
@@ -38,8 +44,12 @@ actor ShellCommandRunner {
         environment: [String: String]? = nil
     ) async throws -> ShellCommandResult {
         guard FileManager.default.isExecutableFile(atPath: executable) || executable.contains("/") == false else {
+            AppLogger.shell.error("Executable not found: \(executable, privacy: .public)")
             throw ShellCommandError.executableNotFound(executable)
         }
+
+        let commandDescription = ([executable] + arguments).joined(separator: " ")
+        AppLogger.shell.debug("Running: \(commandDescription, privacy: .public) in \(currentDirectory ?? "(default)", privacy: .public)")
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executable)
@@ -72,7 +82,15 @@ actor ShellCommandRunner {
             do {
                 try process.run()
             } catch {
+                AppLogger.shell.error("Failed to launch process: \(error.localizedDescription, privacy: .public)")
                 continuation.resume(throwing: ShellCommandError.failed(error.localizedDescription))
+            }
+        }
+
+        if result.exitCode != 0 {
+            AppLogger.shell.warning("Command exited with code \(result.exitCode): \(commandDescription, privacy: .public)")
+            if !result.stderr.isEmpty {
+                AppLogger.shell.warning("stderr: \(result.stderr.prefix(500), privacy: .public)")
             }
         }
 
@@ -86,22 +104,28 @@ actor ShellCommandRunner {
         environment: [String: String]? = nil,
         timeout: TimeInterval
     ) async throws -> ShellCommandResult {
-        try await withThrowingTaskGroup(of: ShellCommandResult.self) { group in
-            group.addTask {
-                try await self.run(
-                    executable: executable,
-                    arguments: arguments,
-                    currentDirectory: currentDirectory,
-                    environment: environment
-                )
+        let commandDescription = ([executable] + arguments).joined(separator: " ")
+        do {
+            return try await withThrowingTaskGroup(of: ShellCommandResult.self) { group in
+                group.addTask {
+                    try await self.run(
+                        executable: executable,
+                        arguments: arguments,
+                        currentDirectory: currentDirectory,
+                        environment: environment
+                    )
+                }
+                group.addTask {
+                    try await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
+                    throw ShellCommandError.timedOut(timeout)
+                }
+                let result = try await group.next()!
+                group.cancelAll()
+                return result
             }
-            group.addTask {
-                try await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
-                throw ShellCommandError.timedOut(timeout)
-            }
-            let result = try await group.next()!
-            group.cancelAll()
-            return result
+        } catch let error as ShellCommandError where error.isTimeout {
+            AppLogger.shell.error("Command timed out after \(Int(timeout))s: \(commandDescription, privacy: .public)")
+            throw error
         }
     }
 }

@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import os
 
 enum GitServiceError: LocalizedError {
     case notAGitRepository(String)
@@ -45,28 +46,40 @@ actor GitRepositoryService {
     private static let inspectTimeout: TimeInterval = 10
 
     func inspectRepository(at path: String, repositoryRoot: String? = nil) async throws -> RepositorySnapshot {
+        let log = AppLogger.git
+        log.info("Inspecting repository at \(path, privacy: .public)")
+
         let rootPath: String
         if let repositoryRoot {
             rootPath = repositoryRoot
         } else {
             do {
-                rootPath = try await self.repositoryRoot(for: path)
+                log.debug("Locating repository root...")
+                rootPath = try await self.repositoryRoot(for: path, timeout: Self.inspectTimeout)
+                log.info("Repository root: \(rootPath, privacy: .public)")
             } catch {
+                log.error("Failed to locate repository root: \(error.localizedDescription, privacy: .public)")
                 throw inspectionError(path: path, step: "Locate repository root", underlying: error)
             }
         }
 
         let branch: String
         do {
-            branch = try await currentBranch(for: path)
+            log.debug("Reading current branch...")
+            branch = try await currentBranch(for: path, timeout: Self.inspectTimeout)
+            log.info("Current branch: \(branch, privacy: .public)")
         } catch {
+            log.error("Failed to read current branch: \(error.localizedDescription, privacy: .public)")
             throw inspectionError(path: path, step: "Read current branch", underlying: error)
         }
 
         let head: String
         do {
-            head = try await headCommit(for: path)
+            log.debug("Reading HEAD commit...")
+            head = try await headCommit(for: path, timeout: Self.inspectTimeout)
+            log.info("HEAD commit: \(head, privacy: .public)")
         } catch {
+            log.error("Failed to read HEAD commit: \(error.localizedDescription, privacy: .public)")
             throw inspectionError(path: path, step: "Read HEAD commit", underlying: error)
         }
 
@@ -74,17 +87,24 @@ actor GitRepositoryService {
         // and degrade gracefully so the workspace still opens.
         let worktrees: [WorktreeModel]
         do {
+            log.debug("Listing worktrees...")
             worktrees = try await listWorktrees(for: rootPath, timeout: Self.inspectTimeout)
+            log.info("Found \(worktrees.count) worktree(s)")
         } catch is ShellCommandError {
+            log.warning("Worktree listing timed out or failed, falling back to single worktree")
             worktrees = [WorktreeModel(path: rootPath, branch: branch, head: head, isMainWorktree: true, isLocked: false)]
         } catch {
+            log.error("Failed to list worktrees: \(error.localizedDescription, privacy: .public)")
             throw inspectionError(path: path, step: "List worktrees", underlying: error)
         }
 
         let status: RepositoryStatusSnapshot
         do {
+            log.debug("Reading repository status...")
             status = try await repositoryStatus(for: path, timeout: Self.inspectTimeout)
+            log.info("Status: \(status.changedFileCount) changed files, ahead=\(status.aheadCount), behind=\(status.behindCount)")
         } catch {
+            log.warning("Repository status failed, using empty status: \(error.localizedDescription, privacy: .public)")
             // Status is non-critical — open with empty status and refresh later
             status = RepositoryStatusSnapshot(
                 hasUncommittedChanges: false,
@@ -96,6 +116,7 @@ actor GitRepositoryService {
             )
         }
 
+        log.info("Repository inspection complete for \(rootPath, privacy: .public)")
         return RepositorySnapshot(
             rootPath: rootPath,
             currentBranch: branch,
@@ -105,29 +126,29 @@ actor GitRepositoryService {
         )
     }
 
-    func repositoryRoot(for path: String) async throws -> String {
-        let result = try await git(arguments: ["rev-parse", "--show-toplevel"], currentDirectory: path)
+    func repositoryRoot(for path: String, timeout: TimeInterval? = nil) async throws -> String {
+        let result = try await git(arguments: ["rev-parse", "--show-toplevel"], currentDirectory: path, timeout: timeout)
         guard result.exitCode == 0 else {
             throw GitServiceError.notAGitRepository(path)
         }
         return result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    func currentBranch(for rootPath: String) async throws -> String {
-        let symbolicRefResult = try await git(arguments: ["symbolic-ref", "--quiet", "--short", "HEAD"], currentDirectory: rootPath)
+    func currentBranch(for rootPath: String, timeout: TimeInterval? = nil) async throws -> String {
+        let symbolicRefResult = try await git(arguments: ["symbolic-ref", "--quiet", "--short", "HEAD"], currentDirectory: rootPath, timeout: timeout)
         if symbolicRefResult.exitCode == 0 {
             return symbolicRefResult.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
         }
 
-        let result = try await git(arguments: ["rev-parse", "--abbrev-ref", "HEAD"], currentDirectory: rootPath)
+        let result = try await git(arguments: ["rev-parse", "--abbrev-ref", "HEAD"], currentDirectory: rootPath, timeout: timeout)
         guard result.exitCode == 0 else {
             throw GitServiceError.commandFailed(result.stderr.nonEmptyOrFallback("Unable to read current branch."))
         }
         return result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    func headCommit(for rootPath: String) async throws -> String {
-        let result = try await git(arguments: ["rev-parse", "--short", "HEAD"], currentDirectory: rootPath)
+    func headCommit(for rootPath: String, timeout: TimeInterval? = nil) async throws -> String {
+        let result = try await git(arguments: ["rev-parse", "--short", "HEAD"], currentDirectory: rootPath, timeout: timeout)
         if result.exitCode != 0, Self.isUnbornHeadError(result.stderr) {
             return "unborn"
         }
