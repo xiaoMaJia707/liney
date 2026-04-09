@@ -642,6 +642,7 @@ final class WorkspaceStore: ObservableObject {
         appSettings = initialAppSettings ?? appSettingsPersistence.load()
         appSettings.githubIntegrationEnabled = false
         LocalizationManager.shared.updateSelectedLanguage(appSettings.appLanguage)
+        AppLogger.updateLevel(appSettings.logLevel)
         NotificationCenter.default.post(name: .lineyAppSettingsDidChange, object: appSettings)
         let state = normalizeLaunchState(initialWorkspaceState ?? persistence.load())
         workspaces = state.workspaces.map(WorkspaceModel.init(record:))
@@ -671,12 +672,8 @@ final class WorkspaceStore: ObservableObject {
         panel.prompt = localized("main.openPanel.prompt")
         panel.message = localized("main.openPanel.message")
 
-        AppLogger.workspace.info("Opening folder panel")
-        guard panel.runModal() == .OK, let url = panel.url else {
-            AppLogger.workspace.info("Open folder panel cancelled")
-            return
-        }
-        AppLogger.workspace.info("Selected folder: \(url.path, privacy: .public)")
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        if AppLogger.isVerbose { AppLogger.workspace.info("Selected folder: \(url.path, privacy: .public)") }
         Task { @MainActor in
             await addWorkspace(at: url)
         }
@@ -684,16 +681,14 @@ final class WorkspaceStore: ObservableObject {
 
     func addWorkspace(at url: URL) async {
         let normalizedPath = url.standardizedFileURL.path
-        AppLogger.workspace.info("Adding workspace at \(normalizedPath, privacy: .public)")
+        if AppLogger.isVerbose { AppLogger.workspace.info("Adding workspace at \(normalizedPath, privacy: .public)") }
         do {
             try await openRepositoryWorkspace(at: normalizedPath, persistAfterChange: false)
-            AppLogger.workspace.info("Workspace opened successfully as repository")
             persist()
         } catch GitServiceError.notAGitRepository {
-            AppLogger.workspace.info("Not a git repository, adding as local workspace")
             addLocalWorkspace(atPath: normalizedPath)
         } catch {
-            AppLogger.workspace.error("Failed to open workspace: \(error.localizedDescription, privacy: .public)")
+            if AppLogger.isEnabled { AppLogger.workspace.error("Failed to open workspace: \(error.localizedDescription, privacy: .public)") }
             presentError(title: localized("main.error.openRepository.title"), message: error.localizedDescription)
         }
     }
@@ -2797,6 +2792,7 @@ final class WorkspaceStore: ObservableObject {
     private func persistAppSettings() {
         do {
             try appSettingsPersistence.save(appSettings)
+            AppLogger.updateLevel(appSettings.logLevel)
             NotificationCenter.default.post(name: .lineyAppSettingsDidChange, object: appSettings)
         } catch {
             presentedError = PresentedError(title: localized("main.error.saveSettings.title"), message: error.localizedDescription)
@@ -2812,7 +2808,7 @@ final class WorkspaceStore: ObservableObject {
         persistAfterChange: Bool
     ) async throws {
         let normalizedPath = URL(fileURLWithPath: path).standardizedFileURL.path
-        AppLogger.workspace.info("Opening repository workspace at \(normalizedPath, privacy: .public)")
+        if AppLogger.isVerbose { AppLogger.workspace.info("Opening repository workspace at \(normalizedPath, privacy: .public)") }
         let snapshot = try await gitRepositoryService.inspectRepository(at: normalizedPath)
 
         if let existing = workspaces.first(where: {

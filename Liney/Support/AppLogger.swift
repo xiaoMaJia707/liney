@@ -16,4 +16,13 @@ enum AppLogger {
     static let git = Logger(subsystem: subsystem, category: "git")
     static let shell = Logger(subsystem: subsystem, category: "shell")
     static let sidebar = Logger(subsystem: subsystem, category: "sidebar")
+
+    private(set) static var level: AppLogLevel = .off
+
+    static func updateLevel(_ newLevel: AppLogLevel) {
+        level = newLevel
+    }
+
+    static var isVerbose: Bool { level == .verbose }
+    static var isEnabled: Bool { level != .off }
 }

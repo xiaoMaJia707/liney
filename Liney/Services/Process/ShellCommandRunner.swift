@@ -44,12 +44,12 @@ actor ShellCommandRunner {
         environment: [String: String]? = nil
     ) async throws -> ShellCommandResult {
         guard FileManager.default.isExecutableFile(atPath: executable) || executable.contains("/") == false else {
-            AppLogger.shell.error("Executable not found: \(executable, privacy: .public)")
+            if AppLogger.isEnabled { AppLogger.shell.error("Executable not found: \(executable, privacy: .public)") }
             throw ShellCommandError.executableNotFound(executable)
         }
 
         let commandDescription = ([executable] + arguments).joined(separator: " ")
-        AppLogger.shell.debug("Running: \(commandDescription, privacy: .public) in \(currentDirectory ?? "(default)", privacy: .public)")
+        if AppLogger.isVerbose { AppLogger.shell.debug("Running: \(commandDescription, privacy: .public) in \(currentDirectory ?? "(default)", privacy: .public)") }
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executable)
@@ -82,12 +82,12 @@ actor ShellCommandRunner {
             do {
                 try process.run()
             } catch {
-                AppLogger.shell.error("Failed to launch process: \(error.localizedDescription, privacy: .public)")
+                if AppLogger.isEnabled { AppLogger.shell.error("Failed to launch process: \(error.localizedDescription, privacy: .public)") }
                 continuation.resume(throwing: ShellCommandError.failed(error.localizedDescription))
             }
         }
 
-        if result.exitCode != 0 {
+        if result.exitCode != 0, AppLogger.isEnabled {
             AppLogger.shell.warning("Command exited with code \(result.exitCode): \(commandDescription, privacy: .public)")
             if !result.stderr.isEmpty {
                 AppLogger.shell.warning("stderr: \(result.stderr.prefix(500), privacy: .public)")
@@ -124,7 +124,7 @@ actor ShellCommandRunner {
                 return result
             }
         } catch let error as ShellCommandError where error.isTimeout {
-            AppLogger.shell.error("Command timed out after \(Int(timeout))s: \(commandDescription, privacy: .public)")
+            if AppLogger.isEnabled { AppLogger.shell.error("Command timed out after \(Int(timeout))s: \(commandDescription, privacy: .public)") }
             throw error
         }
     }

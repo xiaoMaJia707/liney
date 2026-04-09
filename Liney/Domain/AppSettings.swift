@@ -9,6 +9,20 @@ import AppKit
 import Carbon
 import Foundation
 
+enum AppLogLevel: String, Codable, Hashable, CaseIterable {
+    case off
+    case warningAndError
+    case verbose
+
+    var localizedName: String {
+        switch self {
+        case .off: return "Off"
+        case .warningAndError: return "Warning & Error"
+        case .verbose: return "All Logs"
+        }
+    }
+}
+
 nonisolated private func lineyLocalizedSettingsString(_ key: String) -> String {
     LocalizationManager.stringForCurrentLanguage(key)
 }
@@ -346,6 +360,7 @@ struct AppSettings: Codable, Hashable {
     var workspaceGroups: [WorkspaceGroup]
     var sidebarRootOrder: [SidebarRootItem]
     var keyboardShortcutOverrides: [String: KeyboardShortcutOverride]
+    var logLevel: AppLogLevel
 
     init(
         appLanguage: AppLanguage = .automatic,
@@ -391,7 +406,8 @@ struct AppSettings: Codable, Hashable {
         preferredSSHPresetID: UUID? = nil,
         workspaceGroups: [WorkspaceGroup] = [],
         sidebarRootOrder: [SidebarRootItem] = [],
-        keyboardShortcutOverrides: [String: KeyboardShortcutOverride] = [:]
+        keyboardShortcutOverrides: [String: KeyboardShortcutOverride] = [:],
+        logLevel: AppLogLevel = .off
     ) {
         let normalizedKeyboardShortcutOverrides = LineyKeyboardShortcuts.normalizedOverrides(keyboardShortcutOverrides)
         let normalizedAgentPresets = lineyNormalizedAgentPresets(agentPresets)
@@ -462,6 +478,7 @@ struct AppSettings: Codable, Hashable {
         }
         self.workspaceGroups = workspaceGroups
         self.sidebarRootOrder = sidebarRootOrder
+        self.logLevel = logLevel
     }
 }
 
@@ -511,6 +528,7 @@ extension AppSettings {
         case workspaceGroups
         case sidebarRootOrder
         case keyboardShortcutOverrides
+        case logLevel
     }
 
     init(from decoder: any Decoder) throws {
@@ -567,7 +585,8 @@ extension AppSettings {
             preferredSSHPresetID: try container.decodeIfPresent(UUID.self, forKey: .preferredSSHPresetID),
             workspaceGroups: try container.decodeIfPresent([WorkspaceGroup].self, forKey: .workspaceGroups) ?? [],
             sidebarRootOrder: try container.decodeIfPresent([SidebarRootItem].self, forKey: .sidebarRootOrder) ?? [],
-            keyboardShortcutOverrides: try container.decodeIfPresent([String: KeyboardShortcutOverride].self, forKey: .keyboardShortcutOverrides) ?? [:]
+            keyboardShortcutOverrides: try container.decodeIfPresent([String: KeyboardShortcutOverride].self, forKey: .keyboardShortcutOverrides) ?? [:],
+            logLevel: try container.decodeIfPresent(AppLogLevel.self, forKey: .logLevel) ?? .off
         )
     }
 }

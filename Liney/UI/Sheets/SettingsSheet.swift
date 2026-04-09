@@ -662,6 +662,22 @@ struct SettingsSheet: View {
                 }
                 .padding(.top, 8)
             }
+
+            GroupBox(localized("settings.general.diagnostics.group")) {
+                VStack(alignment: .leading, spacing: 12) {
+                    Picker(localized("settings.general.diagnostics.logLevel"), selection: $appSettings.logLevel) {
+                        ForEach(AppLogLevel.allCases, id: \.self) { level in
+                            Text(level.localizedName)
+                                .tag(level)
+                        }
+                    }
+
+                    Text(localized("settings.general.diagnostics.logLevelHint"))
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.top, 8)
+            }
         }
     }
 
