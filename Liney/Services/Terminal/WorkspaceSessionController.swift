@@ -19,7 +19,6 @@ final class WorkspaceSessionController: ObservableObject {
         }
     }
     @Published var previousFocusedPaneID: UUID?
-    var hasBeenDisplayed = false
 
     init(workspaceID: UUID, paneSnapshots: [PaneSnapshot]) {
         self.workspaceID = workspaceID
