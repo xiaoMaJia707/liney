@@ -79,6 +79,7 @@ struct CreateWorktreeSheetRequest: Identifiable {
     let workspaceID: UUID
     let workspaceName: String
     let repositoryRoot: String
+    var isRemote: Bool = false
 }
 
 struct CreateSSHSessionRequest: Identifiable {

@@ -1700,7 +1700,8 @@ final class WorkspaceStore: ObservableObject {
         createWorktreeRequest = CreateWorktreeSheetRequest(
             workspaceID: workspace.id,
             workspaceName: workspace.name,
-            repositoryRoot: workspace.repositoryRoot
+            repositoryRoot: workspace.repositoryRoot,
+            isRemote: workspace.isRemote
         )
     }
 
@@ -2147,9 +2148,16 @@ final class WorkspaceStore: ObservableObject {
         guard let workspace = workspaces.first(where: { $0.id == workspaceID }),
               workspace.supportsRepositoryFeatures else { return false }
 
-        let normalizedDirectoryPath = URL(fileURLWithPath: draft.normalizedDirectoryPath)
-            .standardizedFileURL
-            .path
+        let isRemote = workspace.isRemote
+
+        let normalizedDirectoryPath: String
+        if isRemote {
+            normalizedDirectoryPath = draft.normalizedDirectoryPath
+        } else {
+            normalizedDirectoryPath = URL(fileURLWithPath: draft.normalizedDirectoryPath)
+                .standardizedFileURL
+                .path
+        }
         let normalizedBranchName = draft.normalizedBranchName
 
         guard !normalizedDirectoryPath.isEmpty else {
@@ -2164,9 +2172,11 @@ final class WorkspaceStore: ObservableObject {
             presentError(title: localized("main.error.createWorktree.title"), message: localized("main.error.createWorktree.branchNoSpaces"))
             return false
         }
-        guard !FileManager.default.fileExists(atPath: normalizedDirectoryPath) else {
-            presentError(title: localized("main.error.createWorktree.title"), message: localized("main.error.createWorktree.pathExists"))
-            return false
+        if !isRemote {
+            guard !FileManager.default.fileExists(atPath: normalizedDirectoryPath) else {
+                presentError(title: localized("main.error.createWorktree.title"), message: localized("main.error.createWorktree.pathExists"))
+                return false
+            }
         }
 
         let request = CreateWorktreeRequest(
@@ -2177,14 +2187,25 @@ final class WorkspaceStore: ObservableObject {
 
         Task { @MainActor in
             do {
-                try await gitRepositoryService.createWorktree(rootPath: workspace.repositoryRoot, request: request)
-                await refreshWorkspace(workspace)
+                if isRemote, let sshConfig = workspace.sshTarget {
+                    try await gitRepositoryService.createRemoteWorktree(
+                        rootPath: workspace.repositoryRoot, request: request, sshConfig: sshConfig
+                    )
+                    await refreshRemoteWorkspace(workspace)
+                } else {
+                    try await gitRepositoryService.createWorktree(rootPath: workspace.repositoryRoot, request: request)
+                    await refreshWorkspace(workspace)
+                }
                 objectWillChange.send()
                 if let worktree = workspace.worktrees.first(where: {
-                    URL(fileURLWithPath: $0.path).standardizedFileURL.path == normalizedDirectoryPath
+                    isRemote
+                        ? $0.path == normalizedDirectoryPath
+                        : URL(fileURLWithPath: $0.path).standardizedFileURL.path == normalizedDirectoryPath
                 }) {
                     activateWorktree(workspace: workspace, worktree: worktree, restartRunning: false, requestedAction: .none)
-                    runSetupScriptIfNeeded(in: workspace)
+                    if !isRemote {
+                        runSetupScriptIfNeeded(in: workspace)
+                    }
                 }
             } catch {
                 presentError(title: localized("main.error.createWorktree.title"), message: error.localizedDescription)

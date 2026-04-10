@@ -394,6 +394,40 @@ actor GitRepositoryService {
         }
     }
 
+    func createRemoteWorktree(rootPath: String, request: CreateWorktreeRequest, sshConfig: SSHSessionConfiguration) async throws {
+        var gitArgs = "git worktree add"
+        if request.createNewBranch {
+            gitArgs += " -b '\(request.branchName)' '\(request.directoryPath)' HEAD"
+        } else {
+            gitArgs += " '\(request.directoryPath)' '\(request.branchName)'"
+        }
+        let script = "cd '\(rootPath)' && \(gitArgs)"
+
+        var arguments = [
+            "-o", "BatchMode=yes",
+            "-o", "ConnectTimeout=10",
+        ]
+        if let port = sshConfig.port {
+            arguments.append(contentsOf: ["-p", "\(port)"])
+        }
+        if let identityFile = sshConfig.identityFilePath {
+            arguments.append(contentsOf: ["-i", identityFile])
+        }
+        arguments.append(sshConfig.destination)
+        arguments.append(script)
+
+        let result = try await runner.run(
+            executable: "/usr/bin/ssh",
+            arguments: arguments,
+            timeout: Self.remoteInspectTimeout
+        )
+        guard result.exitCode == 0 else {
+            throw GitServiceError.commandFailed(
+                result.stderr.nonEmptyOrFallback("Unable to create remote worktree.")
+            )
+        }
+    }
+
     func removeWorktree(rootPath: String, path: String, force: Bool = false) async throws {
         var arguments = ["worktree", "remove"]
         if force {
