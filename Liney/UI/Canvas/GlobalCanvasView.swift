@@ -1051,52 +1051,18 @@ private struct GlobalCanvasCardView: View {
     }
 
     private var titleBar: some View {
-        HStack(spacing: 8) {
-            Circle()
-                .fill(layout.colorGroup == .none ? (card.isSelected ? LineyTheme.accent : LineyTheme.secondaryText.opacity(0.55)) : accentTint)
-                .frame(width: 6, height: 6)
+        HStack(spacing: 6) {
+            Text(card.workspaceName)
+                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .foregroundStyle(accentTint.opacity(0.9))
+                .lineLimit(1)
 
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 5) {
-                    Text(card.workspaceName)
-                        .font(.system(size: 9, weight: .bold, design: .monospaced))
-                        .foregroundStyle(accentTint.opacity(0.9))
-                        .lineLimit(1)
+            Text(card.tab.title)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(.white)
+                .lineLimit(1)
 
-                    if layout.isPinned {
-                        Image(systemName: "pin.fill")
-                            .font(.system(size: 8, weight: .bold))
-                            .foregroundStyle(LineyTheme.warning)
-                    }
-
-                    if layout.isMinimized {
-                        Image(systemName: "rectangle.compress.vertical")
-                            .font(.system(size: 8, weight: .bold))
-                            .foregroundStyle(LineyTheme.mutedText)
-                    }
-                }
-
-                Text(card.tab.title)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-
-                Text(card.primaryPath.isEmpty ? "\(card.worktreeTitle) \(localized("canvas.card.worktreeSuffix"))" : card.primaryPath)
-                    .font(.system(size: 9, weight: .medium, design: .monospaced))
-                    .foregroundStyle(LineyTheme.mutedText)
-                    .lineLimit(1)
-            }
-
-            Spacer(minLength: 6)
-
-            if layout.colorGroup != .none {
-                WorkspaceCanvasBadge(text: layout.colorGroup.title, tint: accentTint)
-            }
-
-            WorkspaceCanvasBadge(
-                text: localizedFormat("canvas.card.panesFormat", card.paneCount, card.paneCount == 1 ? "" : "s"),
-                tint: card.isSelected ? accentTint : LineyTheme.secondaryText
-            )
+            Spacer(minLength: 4)
 
             Menu {
                 Button(layout.isPinned ? localized("canvas.card.unpin") : localized("canvas.card.pin")) {
@@ -1115,7 +1081,7 @@ private struct GlobalCanvasCardView: View {
                 }
             } label: {
                 Image(systemName: "ellipsis.circle")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(card.isSelected ? .white : LineyTheme.secondaryText)
             }
             .menuStyle(.borderlessButton)
@@ -1123,14 +1089,14 @@ private struct GlobalCanvasCardView: View {
 
             Button(action: onOpen) {
                 Image(systemName: "arrow.right.circle.fill")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.system(size: 10, weight: .semibold))
             }
             .buttonStyle(.plain)
             .foregroundStyle(card.isSelected ? .white : LineyTheme.secondaryText)
             .help(localized("canvas.card.openTab"))
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 7)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
         .background(LineyTheme.chromeBackground.opacity(0.94))
         .gesture(
             DragGesture(coordinateSpace: .global)
