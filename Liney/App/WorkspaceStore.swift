@@ -3162,18 +3162,19 @@ final class WorkspaceStore: ObservableObject {
             }
 
             // Only replace worktrees array if it actually changed
-            if workspace.worktrees != merged {
+            let worktreesChanged = workspace.worktrees != merged
+            if worktreesChanged {
                 workspace.worktrees = merged
                 invalidateIconCaches(for: workspace.id)
-            }
 
-            // If active worktree was removed, fall back to repository root
-            if !workspace.worktrees.contains(where: { $0.path == workspace.activeWorktreePath }) {
-                workspace.activeWorktreePath = workspace.repositoryRoot
-            }
+                // If active worktree was removed, fall back to repository root
+                if !merged.contains(where: { $0.path == workspace.activeWorktreePath }) {
+                    workspace.activeWorktreePath = workspace.repositoryRoot
+                }
 
-            workspace.ensureKnownWorktreeStates()
-            workspace.pruneWorktreeCustomizations()
+                workspace.ensureKnownWorktreeStates()
+                workspace.pruneWorktreeCustomizations()
+            }
 
             // Fetch per-worktree status
             if workspace.worktrees.count > 1 {

@@ -244,7 +244,10 @@ final class WorkspaceModel: ObservableObject, Identifiable {
 
     func pruneWorktreeCustomizations() {
         let validPaths = Set(worktrees.map(\.path))
-        settings.worktreeIconOverrides = settings.worktreeIconOverrides.filter { validPaths.contains($0.key) }
+        let pruned = settings.worktreeIconOverrides.filter { validPaths.contains($0.key) }
+        if pruned.count != settings.worktreeIconOverrides.count {
+            settings.worktreeIconOverrides = pruned
+        }
     }
 
     var paneOrder: [UUID] {
@@ -470,15 +473,18 @@ final class WorkspaceModel: ObservableObject, Identifiable {
     }
 
     func mergeWorktreeStatuses(_ statuses: [String: RepositoryStatusSnapshot]) {
+        var changed = false
         for (path, status) in statuses {
-            worktreeStatuses[path] = status
+            if worktreeStatuses[path] != status {
+                worktreeStatuses[path] = status
+                changed = true
+            }
         }
-        if let activeStatus = worktreeStatuses[activeWorktreePath] {
-            hasUncommittedChanges = activeStatus.hasUncommittedChanges
-            changedFileCount = activeStatus.changedFileCount
-            aheadCount = activeStatus.aheadCount
-            behindCount = activeStatus.behindCount
-        }
+        guard changed, let activeStatus = worktreeStatuses[activeWorktreePath] else { return }
+        if hasUncommittedChanges != activeStatus.hasUncommittedChanges { hasUncommittedChanges = activeStatus.hasUncommittedChanges }
+        if changedFileCount != activeStatus.changedFileCount { changedFileCount = activeStatus.changedFileCount }
+        if aheadCount != activeStatus.aheadCount { aheadCount = activeStatus.aheadCount }
+        if behindCount != activeStatus.behindCount { behindCount = activeStatus.behindCount }
     }
 
     func status(for worktreePath: String) -> RepositoryStatusSnapshot? {
