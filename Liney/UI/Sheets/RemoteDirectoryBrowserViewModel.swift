@@ -44,7 +44,7 @@ final class RemoteDirectoryBrowserViewModel: ObservableObject {
     @Published var connectionState: ConnectionState = .idle
     @Published var rootNodes: [DirectoryNode] = []
     @Published var currentPath: String = ""
-    @Published var selectedPath: String = ""
+    @Published var selectedPath: String? = nil
     @Published var password: String = ""
 
     private let sftpService = SFTPService()
