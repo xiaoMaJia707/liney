@@ -1611,6 +1611,15 @@ private final class SidebarOutlineRowView: NSTableRowView {
         )
         addTrackingArea(hoverTrackingArea)
         self.hoverTrackingArea = hoverTrackingArea
+
+        // Re-evaluate hover state based on actual mouse position to clear
+        // stale highlights that linger when the cursor moves quickly.
+        if let window = window {
+            let locationInView = convert(window.mouseLocationOutsideOfEventStream, from: nil)
+            isHovering = bounds.contains(locationInView)
+        } else {
+            isHovering = false
+        }
     }
 
     override func mouseEntered(with event: NSEvent) {

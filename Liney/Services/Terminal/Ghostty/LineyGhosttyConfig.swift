@@ -48,16 +48,19 @@ enum LineyGhosttyConfigManager {
             "# Managed by Liney. Manual edits will be overwritten."
         ]
 
-        let themeName = settings.terminalTheme ?? Self.defaultTheme
-        if let themeContents = readThemeFileContents(named: themeName) {
-            // Inline the theme colors directly so that ghostty_config_load_file
-            // picks them up without relying on Ghostty's own theme lookup.
-            lines.append("# theme: \(themeName)")
-            lines.append(themeContents)
-        } else {
-            // Fallback: let Ghostty resolve the theme by name.
-            lines.append("theme = \(themeName)")
+        if let themeName = settings.terminalTheme {
+            if let themeContents = readThemeFileContents(named: themeName) {
+                // Inline the theme colors directly so that ghostty_config_load_file
+                // picks them up without relying on Ghostty's own theme lookup.
+                lines.append("# theme: \(themeName)")
+                lines.append(themeContents)
+            } else {
+                // Fallback: let Ghostty resolve the theme by name.
+                lines.append("theme = \(themeName)")
+            }
         }
+        // When terminalTheme is nil, no theme config is written so Ghostty
+        // uses its native dark default (black background).
 
         if let terminalFontFamily = settings.terminalFontFamily {
             lines.append("font-family = \(quotedValue(terminalFontFamily))")
