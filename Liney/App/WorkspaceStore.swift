@@ -39,6 +39,7 @@ final class WorkspaceStore: ObservableObject {
     @Published var createWorktreeRequest: CreateWorktreeSheetRequest?
     @Published var createSSHSessionRequest: CreateSSHSessionRequest?
     @Published var createAgentSessionRequest: CreateAgentSessionRequest?
+    @Published var createRemoteWorkspaceRequest: CreateRemoteWorkspaceRequest?
     @Published var pendingWorktreeSwitch: PendingWorktreeSwitch?
     @Published var pendingWorktreeRemoval: PendingWorktreeRemoval?
     @Published var sleepPreventionSession: SleepPreventionSession?
@@ -321,6 +322,20 @@ final class WorkspaceStore: ObservableObject {
                 kind: .command(.openLatestRelease)
             ),
         ]
+
+        if LineyFeatureFlags.showsRemoteSessionCreationUI {
+            items.append(
+                CommandPaletteItem(
+                    id: "create-remote-workspace",
+                    title: localized("main.commandPalette.createRemoteWorkspace"),
+                    subtitle: nil,
+                    group: .sessions,
+                    keywords: ["remote", "server", "ssh", "workspace"],
+                    isGlobal: true,
+                    kind: .command(.createRemoteWorkspace)
+                )
+            )
+        }
 
         items.append(
             contentsOf: LineyFeatureRegistry.shared.commandPaletteItems(
@@ -1712,6 +1727,31 @@ final class WorkspaceStore: ObservableObject {
         )
     }
 
+    func presentCreateRemoteWorkspace() {
+        createRemoteWorkspaceRequest = CreateRemoteWorkspaceRequest()
+    }
+
+    func addRemoteWorkspace(sshConfig: SSHSessionConfiguration, name: String) {
+        let record = WorkspaceRecord(
+            id: UUID(),
+            kind: .remoteServer,
+            name: name,
+            repositoryRoot: sshConfig.remoteWorkingDirectory ?? "/",
+            activeWorktreePath: sshConfig.remoteWorkingDirectory ?? "/",
+            worktreeStates: [],
+            isSidebarExpanded: false,
+            sshTarget: sshConfig
+        )
+        let model = WorkspaceModel(record: record)
+        workspaces.append(model)
+        selectedWorkspaceID = model.id
+        persist()
+
+        Task {
+            await refreshRemoteWorkspace(model)
+        }
+    }
+
     func createSSHSession(workspaceID: UUID, draft: CreateSSHSessionDraft) {
         guard let configuration = draft.configuration,
               let workspaceIndex = workspaces.firstIndex(where: { $0.id == workspaceID }) else { return }
@@ -2367,6 +2407,10 @@ final class WorkspaceStore: ObservableObject {
         case .copyRemoteTargetWorkingDirectory(let workspaceID, let targetID):
             dismissCommandPalette()
             copyRemoteTargetWorkingDirectory(workspaceID: workspaceID, targetID: targetID)
+
+        case .createRemoteWorkspace:
+            dismissCommandPalette()
+            presentCreateRemoteWorkspace()
 
         case .runWorkspaceScript(let id):
             dismissCommandPalette()

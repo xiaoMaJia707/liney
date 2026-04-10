@@ -101,6 +101,10 @@ struct CreateAgentSessionRequest: Identifiable {
     let preferredPresetID: UUID?
 }
 
+struct CreateRemoteWorkspaceRequest: Identifiable {
+    let id = UUID()
+}
+
 struct PendingWorktreeSwitch: Identifiable {
     let id = UUID()
     let workspaceID: UUID
