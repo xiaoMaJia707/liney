@@ -167,7 +167,13 @@ struct RemoteDirectoryBrowser: View {
             } else {
                 List {
                     ForEach(viewModel.rootNodes) { node in
-                        DirectoryRowView(node: node, viewModel: viewModel)
+                        DirectoryRowView(
+                            node: node,
+                            selectedPath: $viewModel.selectedPath,
+                            expandAction: { n in
+                                await viewModel.expandNode(n)
+                            }
+                        )
                     }
                 }
                 .listStyle(.sidebar)
@@ -216,11 +222,17 @@ struct RemoteDirectoryBrowser: View {
 
     private var bottomBar: some View {
         HStack {
-            Text(viewModel.selectedPath)
-                .font(.system(size: 11, design: .monospaced))
-                .foregroundStyle(LineyTheme.secondaryText)
-                .lineLimit(1)
-                .truncationMode(.middle)
+            if let selected = viewModel.selectedPath {
+                Text(selected)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(LineyTheme.secondaryText)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            } else {
+                Text(localized("remote.browser.noSelection"))
+                    .font(.system(size: 11))
+                    .foregroundStyle(LineyTheme.mutedText)
+            }
 
             Spacer()
 
@@ -230,13 +242,14 @@ struct RemoteDirectoryBrowser: View {
             }
 
             Button(localized("remote.browser.open")) {
-                let path = viewModel.selectedPath
-                Task { await viewModel.disconnect() }
-                onSelect(path)
-                dismiss()
+                if let path = viewModel.selectedPath {
+                    Task { await viewModel.disconnect() }
+                    onSelect(path)
+                    dismiss()
+                }
             }
             .buttonStyle(.borderedProminent)
-            .disabled(viewModel.selectedPath.isEmpty)
+            .disabled(viewModel.selectedPath == nil)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
