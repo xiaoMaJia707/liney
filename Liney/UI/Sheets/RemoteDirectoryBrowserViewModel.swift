@@ -121,5 +121,6 @@ final class RemoteDirectoryBrowserViewModel: ObservableObject {
         await sftpService.disconnect()
         connectionState = .idle
         rootNodes = []
+        selectedPath = nil
     }
 }
