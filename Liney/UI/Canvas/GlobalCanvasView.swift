@@ -1040,12 +1040,6 @@ private struct GlobalCanvasCardView: View {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .stroke(cardBorder, lineWidth: card.isSelected ? 1.4 : 1)
         )
-        .overlay(alignment: .leading) {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(accentTint.opacity(0.94))
-                .frame(width: 4)
-                .padding(.vertical, 8)
-        }
         .overlay {
             if !card.isSelected {
                 Color.clear
