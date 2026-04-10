@@ -15,6 +15,7 @@ struct GlobalCanvasView: View {
     let onDismiss: () -> Void
 
     @State private var query = ""
+    @State private var showArchived = false
     @State private var selectedWorkspaceFilters: Set<UUID> = []
     @State private var cardLayouts: [GlobalCanvasCardID: GlobalCanvasCardLayout] = [:]
     @State private var canvasOffset: CGSize = .zero
@@ -293,6 +294,15 @@ struct GlobalCanvasView: View {
                             toggleWorkspaceFilter(workspace.workspaceID)
                         }
                     }
+
+                    GlobalCanvasFilterChip(
+                        title: localized("canvas.filter.showArchived"),
+                        subtitle: "",
+                        isSelected: showArchived
+                    ) {
+                        showArchived.toggle()
+                        refreshCards()
+                    }
                 }
                 .padding(.vertical, 1)
             }
@@ -461,7 +471,7 @@ struct GlobalCanvasView: View {
     }
 
     private func refreshCards() {
-        cachedCards = store.workspaces.flatMap { workspace in
+        cachedCards = store.workspaces.filter { !$0.isArchived || showArchived }.flatMap { workspace in
             workspace.canvasStates().flatMap { state in
                 state.tabs.compactMap { tab in
                     guard let controller = workspace.existingTabController(for: state.worktreePath, tabID: tab.id) else {
