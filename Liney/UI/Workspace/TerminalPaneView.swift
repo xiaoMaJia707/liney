@@ -103,7 +103,6 @@ struct TerminalPaneView: View {
             }
 
             TerminalHostView(session: session, shouldRestoreFocus: isFocused)
-                .id(session.lifecycle == .idle)
                 .background(LineyTheme.paneBackground)
                 .onTapGesture {
                     workspace.focusPane(paneID)

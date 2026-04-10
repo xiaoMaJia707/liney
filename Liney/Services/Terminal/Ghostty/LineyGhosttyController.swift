@@ -108,8 +108,14 @@ final class LineyGhosttyController: ManagedTerminalSessionSurfaceController {
     }
 
     func startManagedSessionIfNeeded() {
+        let wasNew = terminalView.surface == nil
         terminalView.ensureSurface(runtime: LineyGhosttyRuntime.shared, launchConfiguration: launchConfiguration)
         terminalView.syncSurfaceMetrics()
+        if wasNew, terminalView.surface != nil {
+            DispatchQueue.main.async { [weak self] in
+                self?.terminalView.syncSurfaceMetrics()
+            }
+        }
     }
 
     func restartManagedSession() {
