@@ -166,4 +166,20 @@ final class SessionBackendTmuxTests: XCTestCase {
     func testSessionBackendKindCaseIterableIncludesTmuxAttach() {
         XCTAssertTrue(SessionBackendKind.allCases.contains(.tmuxAttach))
     }
+
+    // MARK: - SSH bootstrap injects tmux set-titles
+
+    func testSSHBootstrapInjectsTmuxSetTitles() {
+        let sshConfig = SSHSessionConfiguration(
+            host: "example.com", user: "admin", port: nil,
+            identityFilePath: nil, remoteWorkingDirectory: nil, remoteCommand: nil
+        )
+        let backend = SessionBackendConfiguration.ssh(sshConfig)
+        let launch = backend.makeLaunchConfiguration(
+            preferredWorkingDirectory: "/tmp",
+            baseEnvironment: [:]
+        )
+        XCTAssertTrue(launch.initialInput?.contains("tmux set-option") ?? false,
+                      "SSH bootstrap should inject tmux set-titles on")
+    }
 }

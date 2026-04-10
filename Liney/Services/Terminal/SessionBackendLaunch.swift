@@ -219,6 +219,7 @@ private extension SSHSessionConfiguration {
 
     func sshBootstrapCommands() -> [String] {
         var commands = [
+            #"tmux set-option -g set-titles on 2>/dev/null; true"#,
             #"if [ -n "$ZSH_VERSION" ]; then bindkey $'\e[1;3D' backward-word 2>/dev/null; bindkey $'\e[1;3C' forward-word 2>/dev/null; bindkey $'\e\e[D' backward-word 2>/dev/null; bindkey $'\e\e[C' forward-word 2>/dev/null; fi"#,
             #"if [ -n "$BASH_VERSION" ]; then bind '"\e[1;3D": backward-word' 2>/dev/null; bind '"\e[1;3C": forward-word' 2>/dev/null; bind '"\e\e[D": backward-word' 2>/dev/null; bind '"\e\e[C": forward-word' 2>/dev/null; fi"#,
         ]
