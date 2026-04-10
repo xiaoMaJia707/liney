@@ -29,6 +29,7 @@ final class RemoteGitInspectionTests: XCTestCase {
         XCTAssertEqual(snapshot.changedFileCount, 2)
         XCTAssertEqual(snapshot.aheadCount, 2)
         XCTAssertEqual(snapshot.behindCount, 1)
+        XCTAssertTrue(snapshot.worktrees.isEmpty)
     }
 
     func testParseRemoteGitInspectionEmptyStatus() {
@@ -49,6 +50,7 @@ final class RemoteGitInspectionTests: XCTestCase {
         XCTAssertEqual(snapshot.changedFileCount, 0)
         XCTAssertEqual(snapshot.aheadCount, 0)
         XCTAssertEqual(snapshot.behindCount, 0)
+        XCTAssertTrue(snapshot.worktrees.isEmpty)
     }
 
     func testParseRemoteGitInspectionNoUpstream() {
@@ -69,5 +71,31 @@ final class RemoteGitInspectionTests: XCTestCase {
         XCTAssertEqual(snapshot.changedFileCount, 1)
         XCTAssertEqual(snapshot.aheadCount, 0)
         XCTAssertEqual(snapshot.behindCount, 0)
+        XCTAssertTrue(snapshot.worktrees.isEmpty)
+    }
+
+    func testParseRemoteGitInspectionWithWorktrees() {
+        let output = "__BRANCH__\nmain\n__HEAD__\nabc1234\n__WORKTREE__\nworktree /home/user/project\nHEAD abc1234567890abcdef1234567890abcdef12345678\nbranch refs/heads/main\n\nworktree /home/user/project/.worktrees/feature-branch\nHEAD def5678901234567890abcdef1234567890abcdef12\nbranch refs/heads/feature-branch\n\n__STATUS__\nM  file1.txt\n__AHEAD_BEHIND__\n1\t0"
+
+        let snapshot = GitRepositoryService.parseRemoteInspection(output)
+
+        XCTAssertEqual(snapshot.branch, "main")
+        XCTAssertEqual(snapshot.head, "abc1234")
+        XCTAssertEqual(snapshot.changedFileCount, 1)
+        XCTAssertEqual(snapshot.aheadCount, 1)
+        XCTAssertEqual(snapshot.behindCount, 0)
+        XCTAssertEqual(snapshot.worktrees.count, 2)
+
+        let mainWorktree = snapshot.worktrees.first { $0.isMainWorktree }
+        XCTAssertNotNil(mainWorktree)
+        XCTAssertEqual(mainWorktree?.path, "/home/user/project")
+        XCTAssertEqual(mainWorktree?.branch, "main")
+        XCTAssertEqual(mainWorktree?.head, "abc1234567890abcdef1234567890abcdef12345678")
+
+        let featureWorktree = snapshot.worktrees.first { !$0.isMainWorktree }
+        XCTAssertNotNil(featureWorktree)
+        XCTAssertEqual(featureWorktree?.path, "/home/user/project/.worktrees/feature-branch")
+        XCTAssertEqual(featureWorktree?.branch, "feature-branch")
+        XCTAssertEqual(featureWorktree?.head, "def5678901234567890abcdef1234567890abcdef12")
     }
 }

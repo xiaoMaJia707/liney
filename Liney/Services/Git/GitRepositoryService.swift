@@ -46,6 +46,7 @@ struct RemoteGitSnapshot {
     var changedFileCount: Int
     var aheadCount: Int
     var behindCount: Int
+    var worktrees: [WorktreeModel] = []
 }
 
 actor GitRepositoryService {
@@ -499,39 +500,56 @@ actor GitRepositoryService {
         var aheadCount = 0
         var behindCount = 0
         var currentSection = ""
+        var worktreeLines: [String] = []
 
         for line in output.split(separator: "\n", omittingEmptySubsequences: false) {
             let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
             switch trimmed {
-            case "__BRANCH__", "__HEAD__", "__STATUS__", "__AHEAD_BEHIND__":
+            case "__BRANCH__", "__HEAD__", "__WORKTREE__", "__STATUS__", "__AHEAD_BEHIND__":
                 currentSection = trimmed
             default:
-                guard !trimmed.isEmpty else { continue }
                 switch currentSection {
-                case "__BRANCH__":
-                    branch = trimmed
-                case "__HEAD__":
-                    head = trimmed
-                case "__STATUS__":
-                    changedFileCount += 1
-                case "__AHEAD_BEHIND__":
-                    let parts = trimmed.split(whereSeparator: \.isWhitespace).compactMap { Int($0) }
-                    if parts.count >= 2 {
-                        aheadCount = parts[0]
-                        behindCount = parts[1]
-                    }
+                case "__WORKTREE__":
+                    worktreeLines.append(trimmed)
                 default:
-                    break
+                    guard !trimmed.isEmpty else { continue }
+                    switch currentSection {
+                    case "__BRANCH__":
+                        branch = trimmed
+                    case "__HEAD__":
+                        head = trimmed
+                    case "__STATUS__":
+                        changedFileCount += 1
+                    case "__AHEAD_BEHIND__":
+                        let parts = trimmed.split(whereSeparator: \.isWhitespace).compactMap { Int($0) }
+                        if parts.count >= 2 {
+                            aheadCount = parts[0]
+                            behindCount = parts[1]
+                        }
+                    default:
+                        break
+                    }
                 }
             }
         }
+
+        let worktreeOutput = worktreeLines.joined(separator: "\n")
+        var rootPath = ""
+        for wl in worktreeLines {
+            if wl.hasPrefix("worktree ") {
+                rootPath = String(wl.dropFirst("worktree ".count))
+                break
+            }
+        }
+        let worktrees = parseWorktreeList(worktreeOutput, rootPath: rootPath)
 
         return RemoteGitSnapshot(
             branch: branch,
             head: head,
             changedFileCount: changedFileCount,
             aheadCount: aheadCount,
-            behindCount: behindCount
+            behindCount: behindCount,
+            worktrees: worktrees
         )
     }
 
@@ -541,6 +559,7 @@ actor GitRepositoryService {
         let script = "cd \(remotePath) && " +
             "echo __BRANCH__ && git rev-parse --abbrev-ref HEAD 2>/dev/null && " +
             "echo __HEAD__ && git rev-parse --short HEAD 2>/dev/null && " +
+            "echo __WORKTREE__ && git worktree list --porcelain 2>/dev/null && " +
             "echo __STATUS__ && git status --porcelain 2>/dev/null && " +
             "echo __AHEAD_BEHIND__ && git rev-list --left-right --count HEAD...@{upstream} 2>/dev/null || true"
 
