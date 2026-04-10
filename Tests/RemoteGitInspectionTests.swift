@@ -98,4 +98,32 @@ final class RemoteGitInspectionTests: XCTestCase {
         XCTAssertEqual(featureWorktree?.branch, "feature-branch")
         XCTAssertEqual(featureWorktree?.head, "def5678901234567890abcdef1234567890abcdef12")
     }
+
+    func testParseRemoteWorktreeStatuses() {
+        let output = "__WT_PATH__\n/home/user/project\n__WT_STATUS__\nM  file1.txt\n__WT_AHEAD_BEHIND__\n1\t0\n__WT_PATH__\n/home/user/project-feature\n__WT_STATUS__\n__WT_AHEAD_BEHIND__\n0\t2"
+
+        let statuses = GitRepositoryService.parseRemoteWorktreeStatuses(output)
+
+        XCTAssertEqual(statuses.count, 2)
+        XCTAssertEqual(statuses["/home/user/project"]?.changedFileCount, 1)
+        XCTAssertEqual(statuses["/home/user/project"]?.aheadCount, 1)
+        XCTAssertEqual(statuses["/home/user/project"]?.behindCount, 0)
+        XCTAssertEqual(statuses["/home/user/project-feature"]?.changedFileCount, 0)
+        XCTAssertEqual(statuses["/home/user/project-feature"]?.aheadCount, 0)
+        XCTAssertEqual(statuses["/home/user/project-feature"]?.behindCount, 2)
+    }
+
+    func testParseRemoteWorktreeStatusesSingleWorktree() {
+        let output = "__WT_PATH__\n/home/user/project\n__WT_STATUS__\n__WT_AHEAD_BEHIND__\n0\t0"
+
+        let statuses = GitRepositoryService.parseRemoteWorktreeStatuses(output)
+
+        XCTAssertEqual(statuses.count, 1)
+        XCTAssertEqual(statuses["/home/user/project"]?.changedFileCount, 0)
+    }
+
+    func testParseRemoteWorktreeStatusesEmpty() {
+        let statuses = GitRepositoryService.parseRemoteWorktreeStatuses("")
+        XCTAssertTrue(statuses.isEmpty)
+    }
 }

@@ -3115,6 +3115,30 @@ final class WorkspaceStore: ObservableObject {
 
             workspace.ensureKnownWorktreeStates()
             workspace.pruneWorktreeCustomizations()
+
+            // Fetch per-worktree status
+            if workspace.worktrees.count > 1 {
+                do {
+                    let statuses = try await gitRepositoryService.inspectRemoteWorktreeStatuses(
+                        worktreePaths: workspace.worktrees.map(\.path),
+                        sshConfig: sshConfig
+                    )
+                    var repoStatuses: [String: RepositoryStatusSnapshot] = [:]
+                    for (path, status) in statuses {
+                        repoStatuses[path] = RepositoryStatusSnapshot(
+                            hasUncommittedChanges: status.changedFileCount > 0,
+                            changedFileCount: status.changedFileCount,
+                            aheadCount: status.aheadCount,
+                            behindCount: status.behindCount,
+                            localBranches: [],
+                            remoteBranches: []
+                        )
+                    }
+                    workspace.mergeWorktreeStatuses(repoStatuses)
+                } catch {
+                    // Per-worktree status is best-effort, don't fail the whole refresh
+                }
+            }
         } catch {
             if AppLogger.isEnabled {
                 AppLogger.workspace.error("Remote refresh failed for \(workspace.name): \(error.localizedDescription)")

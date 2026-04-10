@@ -49,6 +49,12 @@ struct RemoteGitSnapshot {
     var worktrees: [WorktreeModel] = []
 }
 
+struct RemoteWorktreeStatus {
+    var changedFileCount: Int
+    var aheadCount: Int
+    var behindCount: Int
+}
+
 actor GitRepositoryService {
     private let runner = ShellCommandRunner()
 
@@ -659,5 +665,83 @@ actor GitRepositoryService {
         }
 
         return Self.parseRemoteInspection(result.stdout)
+    }
+
+    func inspectRemoteWorktreeStatuses(
+        worktreePaths: [String],
+        sshConfig: SSHSessionConfiguration
+    ) async throws -> [String: RemoteWorktreeStatus] {
+        guard !worktreePaths.isEmpty else { return [:] }
+
+        var scriptParts: [String] = []
+        for path in worktreePaths {
+            scriptParts.append("echo '__WT_PATH__' && echo '\(path)' && cd '\(path)' 2>/dev/null && echo '__WT_STATUS__' && git status --porcelain 2>/dev/null && echo '__WT_AHEAD_BEHIND__' && git rev-list --left-right --count HEAD...@{upstream} 2>/dev/null || true")
+        }
+        let script = scriptParts.joined(separator: " && ")
+
+        var arguments = [
+            "-o", "BatchMode=yes",
+            "-o", "ConnectTimeout=10",
+        ]
+        if let port = sshConfig.port {
+            arguments.append(contentsOf: ["-p", "\(port)"])
+        }
+        if let identityFile = sshConfig.identityFilePath {
+            arguments.append(contentsOf: ["-i", identityFile])
+        }
+        arguments.append(sshConfig.destination)
+        arguments.append(script)
+
+        let result = try await runner.run(
+            executable: "/usr/bin/ssh",
+            arguments: arguments,
+            timeout: Self.remoteInspectTimeout
+        )
+        return Self.parseRemoteWorktreeStatuses(result.stdout)
+    }
+
+    nonisolated static func parseRemoteWorktreeStatuses(_ output: String) -> [String: RemoteWorktreeStatus] {
+        var results: [String: RemoteWorktreeStatus] = [:]
+        var currentPath = ""
+        var changedFileCount = 0
+        var aheadCount = 0
+        var behindCount = 0
+        var currentSection = ""
+
+        for line in output.split(separator: "\n", omittingEmptySubsequences: false) {
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            switch trimmed {
+            case "__WT_PATH__":
+                if !currentPath.isEmpty {
+                    results[currentPath] = RemoteWorktreeStatus(changedFileCount: changedFileCount, aheadCount: aheadCount, behindCount: behindCount)
+                }
+                currentPath = ""
+                changedFileCount = 0
+                aheadCount = 0
+                behindCount = 0
+                currentSection = "__WT_PATH__"
+            case "__WT_STATUS__":
+                currentSection = "__WT_STATUS__"
+            case "__WT_AHEAD_BEHIND__":
+                currentSection = "__WT_AHEAD_BEHIND__"
+            default:
+                switch currentSection {
+                case "__WT_PATH__":
+                    if !trimmed.isEmpty { currentPath = trimmed }
+                case "__WT_STATUS__":
+                    if !trimmed.isEmpty { changedFileCount += 1 }
+                case "__WT_AHEAD_BEHIND__":
+                    if !trimmed.isEmpty {
+                        let parts = trimmed.split(whereSeparator: \.isWhitespace).compactMap { Int($0) }
+                        if parts.count >= 2 { aheadCount = parts[0]; behindCount = parts[1] }
+                    }
+                default: break
+                }
+            }
+        }
+        if !currentPath.isEmpty {
+            results[currentPath] = RemoteWorktreeStatus(changedFileCount: changedFileCount, aheadCount: aheadCount, behindCount: behindCount)
+        }
+        return results
     }
 }
