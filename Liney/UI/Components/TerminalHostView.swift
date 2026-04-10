@@ -14,14 +14,15 @@ struct TerminalHostView: NSViewRepresentable {
 
     func makeNSView(context: Context) -> TerminalViewContainer {
         let container = TerminalViewContainer()
-        container.attach(session.nsView, restoreFocus: shouldRestoreFocus)
+        if session.lifecycle != .idle {
+            container.attach(session.nsView, restoreFocus: shouldRestoreFocus)
+        }
         return container
     }
 
     func updateNSView(_ nsView: TerminalViewContainer, context: Context) {
-        nsView.attach(session.nsView, restoreFocus: shouldRestoreFocus)
         if session.lifecycle != .idle {
-            session.nsView.needsDisplay = true
+            nsView.attach(session.nsView, restoreFocus: shouldRestoreFocus)
         }
     }
 }
