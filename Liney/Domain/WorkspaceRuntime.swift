@@ -34,6 +34,9 @@ final class WorkspaceModel: ObservableObject, Identifiable {
     @Published var activityLog: [WorkspaceActivityEntry]
     @Published var sessionController: WorkspaceSessionController
     @Published var zoomedPaneID: UUID?
+    @Published var sshTarget: SSHSessionConfiguration?
+
+    var isRemote: Bool { sshTarget != nil }
 
     private var worktreeStates: [String: WorktreeSessionStateRecord]
     private var worktreeControllers: [String: [UUID: WorkspaceSessionController]]
@@ -42,6 +45,7 @@ final class WorkspaceModel: ObservableObject, Identifiable {
         self.id = record.id
         self.kind = record.kind
         self.repositoryRoot = record.repositoryRoot
+        self.sshTarget = record.sshTarget
         self.name = record.name
         self.activeWorktreePath = record.activeWorktreePath
         self.currentBranch = "-"
@@ -432,7 +436,8 @@ final class WorkspaceModel: ObservableObject, Identifiable {
             isSidebarExpanded: isSidebarExpanded,
             worktrees: worktrees,
             settings: settings,
-            activityLog: activityLog
+            activityLog: activityLog,
+            sshTarget: sshTarget
         )
     }
 
