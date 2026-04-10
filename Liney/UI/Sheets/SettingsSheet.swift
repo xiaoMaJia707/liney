@@ -880,6 +880,28 @@ struct SettingsSheet: View {
                                 }
                             }
                             .pickerStyle(.menu)
+
+                            HStack(spacing: 8) {
+                                Button {
+                                    navigateTheme(direction: -1)
+                                } label: {
+                                    Label(localized("settings.general.terminal.themePrevious"), systemImage: "chevron.up")
+                                }
+
+                                Button {
+                                    navigateTheme(direction: 1)
+                                } label: {
+                                    Label(localized("settings.general.terminal.themeNext"), systemImage: "chevron.down")
+                                }
+
+                                Button {
+                                    navigateThemeRandom()
+                                } label: {
+                                    Label(localized("settings.general.terminal.themeRandom"), systemImage: "shuffle")
+                                }
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
                         }
 
                         Text(localized("settings.general.terminal.themeHint"))
@@ -1502,6 +1524,38 @@ struct SettingsSheet: View {
             get: { appSettings.terminalTheme ?? "" },
             set: { appSettings.terminalTheme = $0 }
         )
+    }
+
+    private func navigateTheme(direction: Int) {
+        let themes = allTerminalThemes
+        guard !themes.isEmpty else { return }
+        let current = appSettings.terminalTheme ?? ""
+        if let index = themes.firstIndex(of: current) {
+            let next = (index + direction + themes.count) % themes.count
+            appSettings.terminalTheme = themes[next]
+        } else {
+            appSettings.terminalTheme = themes[0]
+        }
+        applyThemeLive()
+    }
+
+    private func navigateThemeRandom() {
+        let themes = allTerminalThemes
+        guard themes.count > 1 else { return }
+        let current = appSettings.terminalTheme ?? ""
+        var random = themes.randomElement()!
+        while random == current {
+            random = themes.randomElement()!
+        }
+        appSettings.terminalTheme = random
+        applyThemeLive()
+    }
+
+    private func applyThemeLive() {
+        var settings = appSettings
+        settings.autoRefreshIntervalSeconds = max(10, settings.autoRefreshIntervalSeconds)
+        settings.keyboardShortcutOverrides = LineyKeyboardShortcuts.normalizedOverrides(settings.keyboardShortcutOverrides)
+        store.updateAppSettings(settings)
     }
 
     private var terminalFontFamilyEnabledBinding: Binding<Bool> {

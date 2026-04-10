@@ -104,6 +104,7 @@ final class LineyGhosttyController: ManagedTerminalSessionSurfaceController {
     func applyConfig(_ config: ghostty_config_t) {
         guard let surface = currentSurface else { return }
         ghostty_surface_update_config(surface, config)
+        ghostty_surface_refresh(surface)
         terminalView.syncSurfaceMetrics()
     }
 
