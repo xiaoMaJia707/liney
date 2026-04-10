@@ -912,7 +912,20 @@ final class WorkspaceStore: ObservableObject {
     }
 
     func sidebarIcon(for workspace: WorkspaceModel) -> SidebarItemIcon {
-        workspace.workspaceIconOverride ?? (workspace.supportsRepositoryFeatures ? appSettings.defaultRepositoryIcon : appSettings.defaultLocalTerminalIcon)
+        if let override = workspace.workspaceIconOverride {
+            return override
+        }
+        guard workspace.supportsRepositoryFeatures else {
+            return appSettings.defaultLocalTerminalIcon
+        }
+        if appSettings.defaultRepositoryIcon != .repositoryDefault {
+            return appSettings.defaultRepositoryIcon
+        }
+        let existingIcons = workspaces
+            .filter { $0.id != workspace.id && !$0.isArchived && $0.supportsRepositoryFeatures }
+            .compactMap { $0.workspaceIconOverride }
+        let iconSeed = URL(fileURLWithPath: workspace.repositoryRoot).lastPathComponent
+        return .randomRepository(preferredSeed: iconSeed, avoiding: existingIcons)
     }
 
     func sidebarIcon(for worktree: WorktreeModel, in workspace: WorkspaceModel) -> SidebarItemIcon {
@@ -3083,12 +3096,15 @@ final class WorkspaceStore: ObservableObject {
             let snapshot = try await gitRepositoryService.inspectRemoteRepository(
                 remotePath: remotePath, sshConfig: sshConfig
             )
-            workspace.currentBranch = snapshot.branch
-            workspace.head = snapshot.head
-            workspace.hasUncommittedChanges = snapshot.changedFileCount > 0
-            workspace.changedFileCount = snapshot.changedFileCount
-            workspace.aheadCount = snapshot.aheadCount
-            workspace.behindCount = snapshot.behindCount
+
+            // Only update @Published properties when values actually changed to avoid unnecessary SwiftUI rebuilds
+            if workspace.currentBranch != snapshot.branch { workspace.currentBranch = snapshot.branch }
+            if workspace.head != snapshot.head { workspace.head = snapshot.head }
+            let newHasUncommitted = snapshot.changedFileCount > 0
+            if workspace.hasUncommittedChanges != newHasUncommitted { workspace.hasUncommittedChanges = newHasUncommitted }
+            if workspace.changedFileCount != snapshot.changedFileCount { workspace.changedFileCount = snapshot.changedFileCount }
+            if workspace.aheadCount != snapshot.aheadCount { workspace.aheadCount = snapshot.aheadCount }
+            if workspace.behindCount != snapshot.behindCount { workspace.behindCount = snapshot.behindCount }
 
             // Merge worktrees: preserve existing paths to keep stable IDs and session state
             var merged: [WorktreeModel] = []
@@ -3106,7 +3122,11 @@ final class WorkspaceStore: ObservableObject {
                     merged.append(newWT)
                 }
             }
-            workspace.worktrees = merged
+
+            // Only replace worktrees array if it actually changed
+            if workspace.worktrees != merged {
+                workspace.worktrees = merged
+            }
 
             // If active worktree was removed, fall back to repository root
             if !workspace.worktrees.contains(where: { $0.path == workspace.activeWorktreePath }) {
