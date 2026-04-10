@@ -2300,13 +2300,27 @@ final class WorkspaceStore: ObservableObject {
         Task { @MainActor in
             do {
                 workspace.prepareForWorktreeRemoval(paths: pendingWorktreeRemoval.worktreePaths)
-                for path in pendingWorktreeRemoval.worktreePaths {
-                    try await gitRepositoryService.removeWorktree(rootPath: workspace.repositoryRoot, path: path, force: force)
+                if workspace.isRemote, let sshConfig = workspace.sshTarget {
+                    for path in pendingWorktreeRemoval.worktreePaths {
+                        try await gitRepositoryService.removeRemoteWorktree(
+                            rootPath: workspace.repositoryRoot, path: path, force: force, sshConfig: sshConfig
+                        )
+                    }
+                    workspace.forgetWorktrees(paths: pendingWorktreeRemoval.worktreePaths)
+                    await refreshRemoteWorkspace(workspace)
+                } else {
+                    for path in pendingWorktreeRemoval.worktreePaths {
+                        try await gitRepositoryService.removeWorktree(rootPath: workspace.repositoryRoot, path: path, force: force)
+                    }
+                    workspace.forgetWorktrees(paths: pendingWorktreeRemoval.worktreePaths)
+                    await refreshWorkspace(workspace)
                 }
-                workspace.forgetWorktrees(paths: pendingWorktreeRemoval.worktreePaths)
-                await refreshWorkspace(workspace)
             } catch {
-                await refreshWorkspace(workspace)
+                if workspace.isRemote {
+                    await refreshRemoteWorkspace(workspace)
+                } else {
+                    await refreshWorkspace(workspace)
+                }
                 presentError(title: localized("main.error.removeWorktree.title"), message: error.localizedDescription)
             }
         }
