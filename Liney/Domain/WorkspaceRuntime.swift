@@ -151,7 +151,7 @@ final class WorkspaceModel: ObservableObject, Identifiable {
     }
 
     var supportsRepositoryFeatures: Bool {
-        kind == .repository
+        kind == .repository || kind == .remoteServer
     }
 
     var activeWorktree: WorktreeModel? {

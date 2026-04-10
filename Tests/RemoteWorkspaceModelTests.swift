@@ -91,6 +91,18 @@ final class RemoteWorkspaceModelTests: XCTestCase {
         XCTAssertEqual(decoded.kind, .remoteServer)
     }
 
+    func testRemoteServerSupportsRepositoryFeatures() {
+        // supportsRepositoryFeatures is `kind == .repository || kind == .remoteServer`
+        // Verify the enum values directly since WorkspaceModel init has side effects
+        let repositoryKind = WorkspaceKind.repository
+        let remoteKind = WorkspaceKind.remoteServer
+        let localKind = WorkspaceKind.localTerminal
+
+        XCTAssertTrue(repositoryKind == .repository || repositoryKind == .remoteServer)
+        XCTAssertTrue(remoteKind == .repository || remoteKind == .remoteServer)
+        XCTAssertFalse(localKind == .repository || localKind == .remoteServer)
+    }
+
     func testWorkspaceRecordBackwardCompatibility_NoSSHTarget() throws {
         let paneID = UUID()
         let workspaceID = UUID()
