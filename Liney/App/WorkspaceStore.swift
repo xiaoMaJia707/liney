@@ -61,6 +61,10 @@ final class WorkspaceStore: ObservableObject {
     private var autoRefreshTask: Task<Void, Never>?
     private var statusMessageTask: Task<Void, Never>?
     private var sleepPreventionTickerTask: Task<Void, Never>?
+    private static let remoteRefreshInterval: TimeInterval = 30
+    private var remoteRefreshTimer: Timer?
+    private var remoteWindowObserver: NSObjectProtocol?
+    private var isRefreshingRemotes = false
 
     private func localized(_ key: String) -> String {
         LocalizationManager.shared.string(key)
@@ -89,6 +93,7 @@ final class WorkspaceStore: ObservableObject {
         sleepPreventionTickerTask?.cancel()
         guard Thread.isMainThread else { return }
         MainActor.assumeIsolated {
+            stopRemoteWorkspaceRefreshScheduler()
             metadataWatchService.stop()
             sleepPreventionController.onEvent = nil
             sleepPreventionController.stop()
@@ -661,6 +666,7 @@ final class WorkspaceStore: ObservableObject {
 
         configureUpdater(checkInBackground: true)
         syncAutomationServices()
+        startRemoteWorkspaceRefreshScheduler()
         persist()
     }
 
@@ -2944,6 +2950,69 @@ final class WorkspaceStore: ObservableObject {
             checkInBackground: checkInBackground
         )
         hasConfiguredUpdater = true
+    }
+
+    // MARK: - Remote workspace refresh
+
+    func startRemoteWorkspaceRefreshScheduler() {
+        let timer = Timer(timeInterval: Self.remoteRefreshInterval, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                await self?.refreshAllRemoteWorkspaces()
+            }
+        }
+        timer.tolerance = 5
+        RunLoop.main.add(timer, forMode: .common)
+        remoteRefreshTimer = timer
+
+        remoteWindowObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didBecomeKeyNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                await self?.refreshAllRemoteWorkspaces()
+            }
+        }
+    }
+
+    func stopRemoteWorkspaceRefreshScheduler() {
+        remoteRefreshTimer?.invalidate()
+        remoteRefreshTimer = nil
+        if let observer = remoteWindowObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        remoteWindowObserver = nil
+    }
+
+    private func refreshAllRemoteWorkspaces() async {
+        guard !isRefreshingRemotes else { return }
+        let remotes = workspaces.filter { $0.isRemote && !$0.isArchived }
+        guard !remotes.isEmpty else { return }
+        isRefreshingRemotes = true
+        defer { isRefreshingRemotes = false }
+        for workspace in remotes {
+            await refreshRemoteWorkspace(workspace)
+        }
+    }
+
+    private func refreshRemoteWorkspace(_ workspace: WorkspaceModel) async {
+        guard let sshConfig = workspace.sshTarget else { return }
+        let remotePath = workspace.activeWorktreePath
+        do {
+            let snapshot = try await gitRepositoryService.inspectRemoteRepository(
+                remotePath: remotePath, sshConfig: sshConfig
+            )
+            workspace.currentBranch = snapshot.branch
+            workspace.head = snapshot.head
+            workspace.hasUncommittedChanges = snapshot.changedFileCount > 0
+            workspace.changedFileCount = snapshot.changedFileCount
+            workspace.aheadCount = snapshot.aheadCount
+            workspace.behindCount = snapshot.behindCount
+        } catch {
+            if AppLogger.isEnabled {
+                AppLogger.workspace.error("Remote refresh failed for \(workspace.name): \(error.localizedDescription)")
+            }
+        }
     }
 
     private func refreshGitHubStatus(for workspace: WorkspaceModel) async {
