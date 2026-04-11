@@ -63,6 +63,41 @@ enum ExternalEditorCatalog {
         }
     }
 
+    @MainActor
+    static func openSSHRemote(
+        sshConfiguration: SSHSessionConfiguration,
+        completion: @escaping (Result<Void, any Error>) -> Void
+    ) {
+        let cliPath = vsCodeCLIPath()
+        guard let cliPath else {
+            completion(.failure(CocoaError(.fileNoSuchFile, userInfo: [
+                NSLocalizedDescriptionKey: "VS Code CLI not found. Install VS Code and ensure the app is in /Applications."
+            ])))
+            return
+        }
+        let destination = sshConfiguration.destination
+        let remotePath = sshConfiguration.remoteWorkingDirectory ?? "~"
+        let remoteArg = "ssh-remote+\(destination)"
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: cliPath)
+        task.arguments = ["--remote", remoteArg, remotePath]
+        do {
+            try task.run()
+            completion(.success(()))
+        } catch {
+            completion(.failure(error))
+        }
+    }
+
+    nonisolated private static func vsCodeCLIPath() -> String? {
+        let candidates = [
+            "/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code",
+            "/Applications/Visual Studio Code - Insiders.app/Contents/Resources/app/bin/code-insiders",
+            "/Applications/Cursor.app/Contents/Resources/app/bin/cursor",
+        ]
+        return candidates.first { FileManager.default.fileExists(atPath: $0) }
+    }
+
     nonisolated private static func applicationURL(named applicationName: String) -> URL? {
         let fileManager = FileManager.default
         let bundleName = applicationName.hasSuffix(".app") ? applicationName : "\(applicationName).app"
