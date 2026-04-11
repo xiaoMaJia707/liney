@@ -276,6 +276,55 @@ actor GitRepositoryService {
         throw GitServiceError.commandFailed(result.stderr.nonEmptyOrFallback("Unable to read size for \(path) at HEAD."))
     }
 
+    // MARK: - Git History
+
+    func commitLog(for path: String, maxCount: Int = 200) async throws -> String {
+        let format = "---COMMIT---%H---FIELD---%h---FIELD---%an---FIELD---%aI---FIELD---%s"
+        let result = try await git(
+            arguments: ["log", "--format=\(format)", "--max-count=\(maxCount)"],
+            currentDirectory: path
+        )
+        guard result.exitCode == 0 else {
+            throw GitServiceError.commandFailed(result.stderr.nonEmptyOrFallback("Unable to load commit history."))
+        }
+        return result.stdout
+    }
+
+    func diffNameStatusBetweenCommits(for path: String, fromCommit: String, toCommit: String) async throws -> String {
+        let result = try await git(
+            arguments: ["diff", "--find-renames", "--find-copies", "--name-status", fromCommit, toCommit, "--"],
+            currentDirectory: path
+        )
+        guard result.exitCode == 0 else {
+            throw GitServiceError.commandFailed(result.stderr.nonEmptyOrFallback("Unable to load changed files between commits."))
+        }
+        return result.stdout
+    }
+
+    func diffPatchBetweenCommits(for repositoryPath: String, filePath: String, fromCommit: String, toCommit: String) async throws -> String {
+        let result = try await git(
+            arguments: ["diff", "--find-renames", "--find-copies", "--no-color", fromCommit, toCommit, "--", filePath],
+            currentDirectory: repositoryPath
+        )
+        guard result.exitCode == 0 else {
+            throw GitServiceError.commandFailed(result.stderr.nonEmptyOrFallback("Unable to load diff patch for \(filePath) between commits."))
+        }
+        return result.stdout
+    }
+
+    func showFileAtCommit(_ path: String, commit: String, in repositoryPath: String) async throws -> String? {
+        let result = try await git(arguments: ["show", "\(commit):\(path)"], currentDirectory: repositoryPath)
+        if result.exitCode == 0 {
+            return result.stdout
+        }
+        if result.stderr.lowercased().contains("does not exist") || result.stderr.lowercased().contains("exists on disk") {
+            return nil
+        }
+        throw GitServiceError.commandFailed(result.stderr.nonEmptyOrFallback("Unable to load \(path) at \(commit)."))
+    }
+
+    // MARK: - Working Tree Diff
+
     func diffPatch(for repositoryPath: String, filePath: String) async throws -> String {
         let result = try await git(
             arguments: ["diff", "--find-renames", "--find-copies", "--no-color", "HEAD", "--", filePath],
