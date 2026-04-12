@@ -89,6 +89,20 @@ final class HistoryWindowManager: NSObject, NSWindowDelegate {
         }
     }
 
+    func showFileHistory(worktreePath: String?, branchName: String, filePath: String) {
+        let emptyMessage = "No commit history for this file."
+        state.load(worktreePath: worktreePath, branchName: branchName, emptyStateMessage: emptyMessage)
+        state.showFileHistory(filePath: filePath)
+        skipNextFocusRefresh = true
+
+        if let existingWindow = window {
+            existingWindow.title = "File History — \(URL(fileURLWithPath: filePath).lastPathComponent)"
+            existingWindow.makeKeyAndOrderFront(nil)
+            return
+        }
+        show(worktreePath: worktreePath, branchName: branchName, emptyStateMessage: emptyMessage)
+    }
+
     private func windowTitle(branchName: String) -> String {
         branchName.isEmpty ? "Git History" : "Git History — \(branchName)"
     }

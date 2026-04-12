@@ -278,14 +278,62 @@ actor GitRepositoryService {
 
     // MARK: - Git History
 
-    func commitLog(for path: String, maxCount: Int = 200) async throws -> String {
-        let format = "---COMMIT---%H---FIELD---%h---FIELD---%an---FIELD---%aI---FIELD---%s"
+    func commitLog(for path: String, maxCount: Int = 200, branch: String? = nil, skip: Int = 0) async throws -> String {
+        let format = "---COMMIT---%H---FIELD---%h---FIELD---%an---FIELD---%ae---FIELD---%aI---FIELD---%s---FIELD---%b---FIELD---%P"
+        var arguments = ["log", "--format=\(format)", "--max-count=\(maxCount)"]
+        if skip > 0 {
+            arguments.append("--skip=\(skip)")
+        }
+        if let branch {
+            arguments.append(branch)
+        }
         let result = try await git(
-            arguments: ["log", "--format=\(format)", "--max-count=\(maxCount)"],
+            arguments: arguments,
             currentDirectory: path
         )
         guard result.exitCode == 0 else {
             throw GitServiceError.commandFailed(result.stderr.nonEmptyOrFallback("Unable to load commit history."))
+        }
+        return result.stdout
+    }
+
+    func commitLogNumstat(for path: String, maxCount: Int = 200, branch: String? = nil, skip: Int = 0) async throws -> String {
+        var arguments = ["log", "--numstat", "--format=---COMMIT---%H", "--max-count=\(maxCount)"]
+        if skip > 0 {
+            arguments.append("--skip=\(skip)")
+        }
+        if let branch {
+            arguments.append(branch)
+        }
+        let result = try await git(
+            arguments: arguments,
+            currentDirectory: path
+        )
+        guard result.exitCode == 0 else {
+            throw GitServiceError.commandFailed(result.stderr.nonEmptyOrFallback("Unable to load commit stats."))
+        }
+        return result.stdout
+    }
+
+    func fileCommitLog(for path: String, filePath: String, maxCount: Int = 200) async throws -> String {
+        let format = "---COMMIT---%H---FIELD---%h---FIELD---%an---FIELD---%ae---FIELD---%aI---FIELD---%s---FIELD---%b---FIELD---%P"
+        let result = try await git(
+            arguments: ["log", "--follow", "--format=\(format)", "--max-count=\(maxCount)", "--", filePath],
+            currentDirectory: path
+        )
+        guard result.exitCode == 0 else {
+            throw GitServiceError.commandFailed(result.stderr.nonEmptyOrFallback("Unable to load file history."))
+        }
+        return result.stdout
+    }
+
+    func blame(for repositoryPath: String, filePath: String, commit: String = "HEAD") async throws -> String {
+        let result = try await git(
+            arguments: ["blame", "--line-porcelain", commit, "--", filePath],
+            currentDirectory: repositoryPath
+        )
+        guard result.exitCode == 0 else {
+            throw GitServiceError.commandFailed(result.stderr.nonEmptyOrFallback("Unable to load blame for \(filePath)."))
         }
         return result.stdout
     }
