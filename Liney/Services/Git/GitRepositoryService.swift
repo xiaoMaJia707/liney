@@ -278,6 +278,10 @@ actor GitRepositoryService {
 
     // MARK: - Git History
 
+    private static let historyTimeout: TimeInterval = 15
+    private static let blameTimeout: TimeInterval = 30
+    private static let diffTimeout: TimeInterval = 15
+
     func commitLog(for path: String, maxCount: Int = 200, branch: String? = nil, skip: Int = 0) async throws -> String {
         let format = "---COMMIT---%H---FIELD---%h---FIELD---%an---FIELD---%ae---FIELD---%aI---FIELD---%s---FIELD---%b---FIELD---%P"
         var arguments = ["log", "--format=\(format)", "--max-count=\(maxCount)"]
@@ -289,7 +293,8 @@ actor GitRepositoryService {
         }
         let result = try await git(
             arguments: arguments,
-            currentDirectory: path
+            currentDirectory: path,
+            timeout: Self.historyTimeout
         )
         guard result.exitCode == 0 else {
             throw GitServiceError.commandFailed(result.stderr.nonEmptyOrFallback("Unable to load commit history."))
@@ -307,7 +312,8 @@ actor GitRepositoryService {
         }
         let result = try await git(
             arguments: arguments,
-            currentDirectory: path
+            currentDirectory: path,
+            timeout: Self.historyTimeout
         )
         guard result.exitCode == 0 else {
             throw GitServiceError.commandFailed(result.stderr.nonEmptyOrFallback("Unable to load commit stats."))
@@ -319,7 +325,8 @@ actor GitRepositoryService {
         let format = "---COMMIT---%H---FIELD---%h---FIELD---%an---FIELD---%ae---FIELD---%aI---FIELD---%s---FIELD---%b---FIELD---%P"
         let result = try await git(
             arguments: ["log", "--follow", "--format=\(format)", "--max-count=\(maxCount)", "--", filePath],
-            currentDirectory: path
+            currentDirectory: path,
+            timeout: Self.historyTimeout
         )
         guard result.exitCode == 0 else {
             throw GitServiceError.commandFailed(result.stderr.nonEmptyOrFallback("Unable to load file history."))
@@ -330,7 +337,8 @@ actor GitRepositoryService {
     func blame(for repositoryPath: String, filePath: String, commit: String = "HEAD") async throws -> String {
         let result = try await git(
             arguments: ["blame", "--line-porcelain", commit, "--", filePath],
-            currentDirectory: repositoryPath
+            currentDirectory: repositoryPath,
+            timeout: Self.blameTimeout
         )
         guard result.exitCode == 0 else {
             throw GitServiceError.commandFailed(result.stderr.nonEmptyOrFallback("Unable to load blame for \(filePath)."))
@@ -341,7 +349,8 @@ actor GitRepositoryService {
     func diffNameStatusBetweenCommits(for path: String, fromCommit: String, toCommit: String) async throws -> String {
         let result = try await git(
             arguments: ["diff", "--find-renames", "--find-copies", "--name-status", fromCommit, toCommit, "--"],
-            currentDirectory: path
+            currentDirectory: path,
+            timeout: Self.diffTimeout
         )
         guard result.exitCode == 0 else {
             throw GitServiceError.commandFailed(result.stderr.nonEmptyOrFallback("Unable to load changed files between commits."))
@@ -352,7 +361,8 @@ actor GitRepositoryService {
     func diffPatchBetweenCommits(for repositoryPath: String, filePath: String, fromCommit: String, toCommit: String) async throws -> String {
         let result = try await git(
             arguments: ["diff", "--find-renames", "--find-copies", "--no-color", fromCommit, toCommit, "--", filePath],
-            currentDirectory: repositoryPath
+            currentDirectory: repositoryPath,
+            timeout: Self.diffTimeout
         )
         guard result.exitCode == 0 else {
             throw GitServiceError.commandFailed(result.stderr.nonEmptyOrFallback("Unable to load diff patch for \(filePath) between commits."))
@@ -361,7 +371,7 @@ actor GitRepositoryService {
     }
 
     func showFileAtCommit(_ path: String, commit: String, in repositoryPath: String) async throws -> String? {
-        let result = try await git(arguments: ["show", "\(commit):\(path)"], currentDirectory: repositoryPath)
+        let result = try await git(arguments: ["show", "\(commit):\(path)"], currentDirectory: repositoryPath, timeout: Self.diffTimeout)
         if result.exitCode == 0 {
             return result.stdout
         }

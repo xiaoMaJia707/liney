@@ -58,11 +58,11 @@ final class HistoryWindowState: ObservableObject {
     private let gitRepositoryService = GitRepositoryService()
     private var documentCache: [String: DiffFileDocument] = [:]
     private var commitListTask: Task<Void, Never>?
+    private var numstatTask: Task<Void, Never>?
     private var fileListTask: Task<Void, Never>?
     private var documentTask: Task<Void, Never>?
     private var blameTask: Task<Void, Never>?
     private var branchTask: Task<Void, Never>?
-    private var searchDebounceTask: Task<Void, Never>?
 
     private static let pageSize = 100
 
@@ -344,6 +344,7 @@ final class HistoryWindowState: ObservableObject {
 
     private func cancelAll() {
         commitListTask?.cancel()
+        numstatTask?.cancel()
         fileListTask?.cancel()
         documentTask?.cancel()
         blameTask?.cancel()
@@ -356,38 +357,44 @@ final class HistoryWindowState: ObservableObject {
         if !append { loadErrorMessage = nil }
 
         do {
-            async let logOutput = gitRepositoryService.commitLog(
+            // Load commit list first — show it immediately without waiting for numstat
+            let logOutput = try await gitRepositoryService.commitLog(
                 for: worktreePath,
                 maxCount: Self.pageSize,
                 branch: selectedBranch,
                 skip: skip
             )
-            async let numstatOutput = gitRepositoryService.commitLogNumstat(
-                for: worktreePath,
-                maxCount: Self.pageSize,
-                branch: selectedBranch,
-                skip: skip
-            )
-
-            let parsed = GitHistoryCommit.parseLog(try await logOutput)
-            let enriched = GitHistoryCommit.enrichWithStats(parsed, numstatOutput: try await numstatOutput)
 
             guard !Task.isCancelled else { return }
 
+            let parsed = GitHistoryCommit.parseLog(logOutput)
+
             if append {
-                commits.append(contentsOf: enriched)
+                commits.append(contentsOf: parsed)
             } else {
-                commits = enriched
+                commits = parsed
             }
-            hasMoreCommits = enriched.count >= Self.pageSize
+            hasMoreCommits = parsed.count >= Self.pageSize
             isLoadingCommits = false
             DiffDiagnostics.log(
-                "Loaded \(enriched.count) commits in \(DiffDiagnostics.formatMilliseconds(DiffDiagnostics.elapsedMilliseconds(since: start)))"
+                "Loaded \(parsed.count) commits in \(DiffDiagnostics.formatMilliseconds(DiffDiagnostics.elapsedMilliseconds(since: start)))"
             )
 
-            if !append, let first = enriched.first {
+            if !append, let first = parsed.first {
                 selectedCommitID = first.id
                 updateCommitSelection(for: first.id)
+            }
+
+            // Load numstat in the background — enrich commits when ready, don't block UI
+            numstatTask?.cancel()
+            let currentBranch = selectedBranch
+            numstatTask = Task {
+                await self.loadNumstatInBackground(
+                    for: worktreePath,
+                    skip: skip,
+                    branch: currentBranch,
+                    commitHashes: Set(parsed.map(\.hash))
+                )
             }
         } catch {
             guard !Task.isCancelled else { return }
@@ -396,6 +403,31 @@ final class HistoryWindowState: ObservableObject {
             isLoadingCommits = false
             hasMoreCommits = false
             loadErrorMessage = error.localizedDescription.nonEmptyOrFallback("Unable to load commit history.")
+        }
+    }
+
+    /// Loads numstat in background and merges stats into existing commits without blocking the UI.
+    private func loadNumstatInBackground(for worktreePath: String, skip: Int, branch: String?, commitHashes: Set<String>) async {
+        let start = DiffDiagnostics.now()
+        do {
+            let numstatOutput = try await gitRepositoryService.commitLogNumstat(
+                for: worktreePath,
+                maxCount: Self.pageSize,
+                branch: branch,
+                skip: skip
+            )
+            guard !Task.isCancelled else { return }
+
+            // Merge stats into existing commits
+            let enriched = GitHistoryCommit.enrichWithStats(commits, numstatOutput: numstatOutput)
+            commits = enriched
+            DiffDiagnostics.log(
+                "Enriched commits with numstat in \(DiffDiagnostics.formatMilliseconds(DiffDiagnostics.elapsedMilliseconds(since: start)))"
+            )
+        } catch {
+            // numstat failure is non-critical — commits still show without stats
+            guard !Task.isCancelled else { return }
+            DiffDiagnostics.error("Numstat load failed (non-critical): \(error.localizedDescription)")
         }
     }
 
@@ -562,6 +594,9 @@ final class HistoryWindowState: ObservableObject {
 
     // MARK: - Document Loading
 
+    /// Maximum patch size (in bytes) that we'll render. Beyond this YiTong may become unresponsive.
+    private static let maxPatchSize = 512 * 1024  // 512 KB
+
     nonisolated private static func loadHistoryDocument(
         for file: DiffChangedFile,
         worktreePath: String,
@@ -573,6 +608,9 @@ final class HistoryWindowState: ObservableObject {
 
         if file.status == .added {
             let newContents = try await gitRepositoryService.showFileAtCommit(diffPath, commit: toCommit, in: worktreePath) ?? ""
+            if newContents.utf8.count > maxPatchSize {
+                return DiffWindowState.makeDocument(file: file, unifiedPatch: largePatchMessage(path: diffPath, size: newContents.utf8.count))
+            }
             return DiffWindowState.makeDocument(
                 file: file,
                 unifiedPatch: syntheticAddedPatch(path: diffPath, contents: newContents)
@@ -581,6 +619,9 @@ final class HistoryWindowState: ObservableObject {
 
         if file.status == .deleted {
             let oldContents = try await gitRepositoryService.showFileAtCommit(file.oldPath ?? diffPath, commit: fromCommit, in: worktreePath) ?? ""
+            if oldContents.utf8.count > maxPatchSize {
+                return DiffWindowState.makeDocument(file: file, unifiedPatch: largePatchMessage(path: file.oldPath ?? diffPath, size: oldContents.utf8.count))
+            }
             return DiffWindowState.makeDocument(
                 file: file,
                 unifiedPatch: syntheticDeletedPatch(path: file.oldPath ?? diffPath, contents: oldContents)
@@ -595,6 +636,9 @@ final class HistoryWindowState: ObservableObject {
         )
 
         if let patch = patch.nilIfEmpty {
+            if patch.utf8.count > maxPatchSize {
+                return DiffWindowState.makeDocument(file: file, unifiedPatch: largePatchMessage(path: diffPath, size: patch.utf8.count))
+            }
             return DiffWindowState.makeDocument(file: file, unifiedPatch: patch)
         }
 
@@ -602,6 +646,11 @@ final class HistoryWindowState: ObservableObject {
             file: file,
             unifiedPatch: "No unified patch available for \(diffPath)."
         )
+    }
+
+    nonisolated private static func largePatchMessage(path: String, size: Int) -> String {
+        let sizeKB = size / 1024
+        return "Diff for \(path) is too large to display (\(sizeKB) KB). Consider viewing this file in an external diff tool."
     }
 
     nonisolated private static func syntheticAddedPatch(path: String, contents: String) -> String {
