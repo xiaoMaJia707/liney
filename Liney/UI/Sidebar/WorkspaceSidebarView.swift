@@ -52,7 +52,7 @@ struct WorkspaceSidebarView: View {
                     .frame(height: 1)
             }
 
-            WorkspaceOutlineSidebar(query: query, onOpenRepository: store.addWorkspaceFromOpenPanel)
+            WorkspaceOutlineSidebar(query: query, onOpenRepository: store.addWorkspaceFromOpenPanel, onConnectSSH: store.presentCreateSSHWorkspace)
                 .environmentObject(store)
         }
         .background(LineyTheme.sidebarBackground)
@@ -64,6 +64,7 @@ private struct WorkspaceOutlineSidebar: NSViewRepresentable {
 
     let query: String
     let onOpenRepository: () -> Void
+    let onConnectSSH: () -> Void
 
     func makeCoordinator() -> WorkspaceSidebarCoordinator {
         WorkspaceSidebarCoordinator(store: store)
@@ -77,7 +78,7 @@ private struct WorkspaceOutlineSidebar: NSViewRepresentable {
 
     func updateNSView(_ nsView: SidebarOutlineContainerView, context: Context) {
         context.coordinator.store = store
-        nsView.setOpenRepositoryAction(onOpenRepository)
+        nsView.setFooterActions(onOpenRepository: onOpenRepository, onConnectSSH: onConnectSSH)
         context.coordinator.apply(
             workspaces: store.sidebarWorkspaces,
             selectedWorkspaceID: store.selectedWorkspaceID,
@@ -86,10 +87,11 @@ private struct WorkspaceOutlineSidebar: NSViewRepresentable {
     }
 }
 
-private struct SidebarOpenRepositoryRow: View {
+private struct SidebarFooterActionsRow: View {
     @ObservedObject private var localization = LocalizationManager.shared
     @EnvironmentObject private var store: WorkspaceStore
-    let action: () -> Void
+    let onOpenRepository: () -> Void
+    let onConnectSSH: () -> Void
 
     private func localized(_ key: String) -> String {
         localization.string(key)
@@ -100,27 +102,51 @@ private struct SidebarOpenRepositoryRow: View {
     }
 
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 5) {
-                Image(systemName: "folder.badge.plus")
-                    .font(.system(size: 11 * uiScale, weight: .semibold))
-                Text(localized("sidebar.openFolder"))
-                    .font(.system(size: 11 * uiScale, weight: .semibold))
+        VStack(spacing: 6) {
+            Button(action: onOpenRepository) {
+                HStack(spacing: 5) {
+                    Image(systemName: "folder.badge.plus")
+                        .font(.system(size: 11 * uiScale, weight: .semibold))
+                    Text(localized("sidebar.openFolder"))
+                        .font(.system(size: 11 * uiScale, weight: .semibold))
 
-                Spacer(minLength: 0)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 10 * uiScale)
+                .frame(maxWidth: .infinity, minHeight: 30 * uiScale, alignment: .leading)
+                .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
             }
-            .padding(.horizontal, 10 * uiScale)
-            .frame(maxWidth: .infinity, minHeight: 30 * uiScale, alignment: .leading)
-            .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .buttonStyle(.plain)
+            .background(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                    .foregroundStyle(LineyTheme.border)
+            )
+            .foregroundStyle(LineyTheme.secondaryText)
+            .help(localized("sidebar.openFolderHelp"))
+
+            Button(action: onConnectSSH) {
+                HStack(spacing: 5) {
+                    Image(systemName: "network")
+                        .font(.system(size: 11 * uiScale, weight: .semibold))
+                    Text(localized("main.sidebar.connectSSH"))
+                        .font(.system(size: 11 * uiScale, weight: .semibold))
+
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 10 * uiScale)
+                .frame(maxWidth: .infinity, minHeight: 30 * uiScale, alignment: .leading)
+                .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .background(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                    .foregroundStyle(LineyTheme.border)
+            )
+            .foregroundStyle(LineyTheme.secondaryText)
+            .help(localized("main.sidebar.connectSSH"))
         }
-        .buttonStyle(.plain)
-        .background(
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
-                .foregroundStyle(LineyTheme.border)
-        )
-        .foregroundStyle(LineyTheme.secondaryText)
-        .help(localized("sidebar.openFolderHelp"))
     }
 }
 
@@ -568,7 +594,7 @@ private final class WorkspaceSidebarCoordinator: NSObject, NSOutlineViewDataSour
                 menu.addItem(.separator())
             }
 
-            if workspace.supportsRepositoryFeatures {
+            if workspace.supportsLocalRepositoryFeatures {
                 addMenuItem(
                     to: menu,
                     title: localized("sidebar.menu.createWorktree"),
@@ -587,7 +613,14 @@ private final class WorkspaceSidebarCoordinator: NSObject, NSOutlineViewDataSour
                     action: #selector(refreshWorkspace(_:)),
                     representedObject: workspace.id
                 )
-            } else {
+            } else if workspace.supportsRepositoryFeatures {
+                addMenuItem(
+                    to: menu,
+                    title: localized("sidebar.menu.refreshRepository"),
+                    action: #selector(refreshWorkspace(_:)),
+                    representedObject: workspace.id
+                )
+            } else if workspace.kind != .sshTerminal {
                 addMenuItem(
                     to: menu,
                     title: localized("sidebar.menu.openAsRepository"),
@@ -785,7 +818,7 @@ private final class WorkspaceSidebarCoordinator: NSObject, NSOutlineViewDataSour
                 representedObject: actionPayload
             )
 
-            if workspace.supportsRepositoryFeatures, !worktree.isMainWorktree {
+            if workspace.supportsLocalRepositoryFeatures, !worktree.isMainWorktree {
                 menu.addItem(.separator())
                 addMenuItem(
                     to: menu,
@@ -1422,7 +1455,7 @@ private final class SidebarOutlineContainerView: NSView {
             footerHostingView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
             footerHostingView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
             footerHostingView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -10),
-            footerHostingView.heightAnchor.constraint(equalToConstant: 34),
+            footerHostingView.heightAnchor.constraint(equalToConstant: 70),
         ])
     }
 
@@ -1440,8 +1473,8 @@ private final class SidebarOutlineContainerView: NSView {
         updateContentLayout()
     }
 
-    func setOpenRepositoryAction(_ action: @escaping () -> Void) {
-        footerHostingView.rootView = AnyView(SidebarOpenRepositoryRow(action: action))
+    func setFooterActions(onOpenRepository: @escaping () -> Void, onConnectSSH: @escaping () -> Void) {
+        footerHostingView.rootView = AnyView(SidebarFooterActionsRow(onOpenRepository: onOpenRepository, onConnectSSH: onConnectSSH))
     }
 
     func relayout() {
@@ -1449,12 +1482,8 @@ private final class SidebarOutlineContainerView: NSView {
     }
 
     private func updateContentLayout() {
-        let viewportSize = scrollView.contentView.bounds.size
-        let visibleWidth = max(scrollView.contentSize.width, viewportSize.width)
-        let visibleHeight = max(scrollView.contentSize.height, viewportSize.height)
-        if let column = outlineView.tableColumns.first {
-            column.width = visibleWidth
-        }
+        let visibleWidth = max(scrollView.contentSize.width, bounds.width)
+        let visibleHeight = max(scrollView.contentSize.height, bounds.height)
         let outlineHeight = outlineContentHeight()
         contentView.outlineHeight = outlineHeight
         let requiredHeight = contentView.requiredHeight(forWidth: visibleWidth)
@@ -1542,10 +1571,11 @@ private final class SidebarOutlineView: NSOutlineView {
         var frame = super.frameOfCell(atColumn: column, row: row)
         let item = self.item(atRow: row) as? SidebarNodeItem
         let isExpandable = item?.isExpandable ?? false
+        let isTopLevel = item?.isWorkspaceNode ?? false
         let disclosureEnd: CGFloat = 20
-        let trailingInset: CGFloat = 8
         if !isExpandable {
             frame.origin.x = disclosureEnd
+            frame.size.width = bounds.width - disclosureEnd - 8
         } else {
             let shift = frame.origin.x - disclosureEnd
             if shift > 0 {
@@ -1553,8 +1583,6 @@ private final class SidebarOutlineView: NSOutlineView {
                 frame.size.width += shift
             }
         }
-        let visibleWidth = max(enclosingScrollView?.contentView.bounds.width ?? visibleRect.width, 0)
-        frame.size.width = max(0, min(frame.size.width, visibleWidth - frame.origin.x - trailingInset))
         return frame
     }
 
@@ -1591,76 +1619,10 @@ private final class SidebarOutlineView: NSOutlineView {
 }
 
 private final class SidebarOutlineRowView: NSTableRowView {
-    private var hoverTrackingArea: NSTrackingArea?
-    private var isHovering = false {
-        didSet {
-            guard oldValue != isHovering else { return }
-            needsDisplay = true
-        }
-    }
-
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        if let hoverTrackingArea {
-            removeTrackingArea(hoverTrackingArea)
-        }
-        let hoverTrackingArea = NSTrackingArea(
-            rect: bounds,
-            options: [.activeInKeyWindow, .inVisibleRect, .mouseEnteredAndExited],
-            owner: self,
-            userInfo: nil
-        )
-        addTrackingArea(hoverTrackingArea)
-        self.hoverTrackingArea = hoverTrackingArea
-
-        // Re-evaluate hover state based on actual mouse position to clear
-        // stale highlights that linger when the cursor moves quickly.
-        if let window = window {
-            let locationInView = convert(window.mouseLocationOutsideOfEventStream, from: nil)
-            isHovering = bounds.contains(locationInView)
-        } else {
-            isHovering = false
-        }
-    }
-
-    override func mouseEntered(with event: NSEvent) {
-        super.mouseEntered(with: event)
-        isHovering = true
-    }
-
-    override func mouseExited(with event: NSEvent) {
-        super.mouseExited(with: event)
-        isHovering = false
-    }
-
-    override func drawBackground(in dirtyRect: NSRect) {
-        guard isHovering, !isSelected else { return }
-        let leadingInset: CGFloat = 6
-        let verticalInset: CGFloat = 1
-        let trailingInset: CGFloat = 6
-        let availableWidth = max(enclosingScrollView?.contentView.bounds.width ?? bounds.width, 0)
-        let rect = NSRect(
-            x: leadingInset,
-            y: verticalInset,
-            width: max(0, availableWidth - leadingInset - trailingInset),
-            height: max(0, bounds.height - (verticalInset * 2))
-        )
-        let path = NSBezierPath(roundedRect: rect, xRadius: 8, yRadius: 8)
-        LineyTheme.sidebarHoverFill.setFill()
-        path.fill()
-    }
+    override func drawBackground(in dirtyRect: NSRect) {}
 
     override func drawSelection(in dirtyRect: NSRect) {
-        let leadingInset: CGFloat = 6
-        let verticalInset: CGFloat = 1
-        let trailingInset: CGFloat = 6
-        let availableWidth = max(enclosingScrollView?.contentView.bounds.width ?? bounds.width, 0)
-        let rect = NSRect(
-            x: leadingInset,
-            y: verticalInset,
-            width: max(0, availableWidth - leadingInset - trailingInset),
-            height: max(0, bounds.height - (verticalInset * 2))
-        )
+        let rect = bounds.insetBy(dx: 6, dy: 1)
         let path = NSBezierPath(roundedRect: rect, xRadius: 12, yRadius: 12)
         LineyTheme.sidebarSelectionFill.setFill()
         path.fill()
@@ -1726,6 +1688,7 @@ private struct GroupRowContent: View {
     let childCount: Int
     let store: WorkspaceStore?
     let isSelected: Bool
+    @State private var isHovering = false
 
     private var appSettings: AppSettings {
         store?.appSettings ?? AppSettings()
@@ -1768,6 +1731,13 @@ private struct GroupRowContent: View {
                 .padding(.leading, 2 * uiScale)
                 .padding(.trailing, 8 * uiScale)
         }
+        .background(
+            LineyTheme.subtleFill.opacity(isHovering ? 0.8 : 0),
+            in: RoundedRectangle(cornerRadius: 6, style: .continuous)
+        )
+        .onHover { isInside in
+            isHovering = isInside
+        }
     }
 }
 
@@ -1780,26 +1750,34 @@ private struct ArchiveGroupRowContent: View {
     }
 
     var body: some View {
-        HStack(spacing: 6 * uiScale) {
-            Image(systemName: "archivebox.fill")
-                .font(.system(size: 10 * uiScale, weight: .bold))
-                .foregroundStyle(LineyTheme.mutedText.opacity(0.6))
+        VStack(spacing: 0) {
+            HStack(spacing: 6 * uiScale) {
+                Image(systemName: "archivebox.fill")
+                    .font(.system(size: 10 * uiScale, weight: .bold))
+                    .foregroundStyle(LineyTheme.mutedText.opacity(0.6))
 
-            Text(LocalizationManager.shared.string("sidebar.archiveGroup.title"))
-                .font(.system(size: 11 * uiScale, weight: .bold, design: .rounded))
-                .foregroundStyle(LineyTheme.mutedText)
-                .lineLimit(1)
-                .truncationMode(.tail)
+                Text(LocalizationManager.shared.string("sidebar.archiveGroup.title"))
+                    .font(.system(size: 11 * uiScale, weight: .bold, design: .rounded))
+                    .foregroundStyle(LineyTheme.mutedText)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
 
-            Spacer(minLength: 4)
+                Spacer(minLength: 4)
 
-            Text("\(childCount)")
-                .font(.system(size: 9 * uiScale, weight: .semibold, design: .monospaced))
-                .foregroundStyle(LineyTheme.mutedText.opacity(0.7))
+                Text("\(childCount)")
+                    .font(.system(size: 9 * uiScale, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(LineyTheme.mutedText.opacity(0.7))
+            }
+            .padding(.vertical, 4 * uiScale)
+            .padding(.leading, 2 * uiScale)
+            .padding(.trailing, 8 * uiScale)
+
+            Rectangle()
+                .fill(LineyTheme.border.opacity(0.5))
+                .frame(height: 0.5)
+                .padding(.leading, 2 * uiScale)
+                .padding(.trailing, 8 * uiScale)
         }
-        .padding(.vertical, 4 * uiScale)
-        .padding(.leading, 2 * uiScale)
-        .padding(.trailing, 8 * uiScale)
     }
 }
 
@@ -1808,6 +1786,7 @@ private struct WorkspaceRowContent: View {
     @ObservedObject private var localization = LocalizationManager.shared
     let store: WorkspaceStore?
     let isSelected: Bool
+    @State private var isHovering = false
 
     private func localized(_ key: String) -> String {
         localization.string(key)
@@ -1902,6 +1881,13 @@ private struct WorkspaceRowContent: View {
         .padding(.vertical, 4 * uiScale)
         .padding(.leading, 2 * uiScale)
         .padding(.trailing, 8 * uiScale)
+        .background(
+            LineyTheme.subtleFill.opacity(isHovering ? 1 : 0),
+            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+        )
+        .onHover { isInside in
+            isHovering = isInside
+        }
     }
 }
 
@@ -1911,6 +1897,7 @@ private struct WorktreeRowContent: View {
     let worktree: WorktreeModel
     let store: WorkspaceStore?
     let isSelected: Bool
+    @State private var isHovering = false
 
     private func localized(_ key: String) -> String {
         localization.string(key)
@@ -1987,6 +1974,13 @@ private struct WorktreeRowContent: View {
         .padding(.leading, leadingInset)
         .padding(.trailing, 8 * uiScale)
         .frame(maxWidth: .infinity, minHeight: 24 * uiScale, alignment: .leading)
+        .background(
+            LineyTheme.subtleFill.opacity(isHovering ? 1 : 0),
+            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+        )
+        .onHover { isInside in
+            isHovering = isInside
+        }
         .help(worktreeNote ?? "")
     }
 }
@@ -2546,10 +2540,12 @@ private struct WorkspaceInlineActions: View {
                 SidebarInlineIconButton(systemName: "plus.square.on.square") {
                     store.createSession(in: workspace)
                 }
-                if workspace.supportsRepositoryFeatures {
+                if workspace.supportsLocalRepositoryFeatures {
                     SidebarInlineIconButton(systemName: "plus.rectangle.on.folder") {
                         store.presentCreateWorktree(for: workspace)
                     }
+                }
+                if workspace.supportsRepositoryFeatures {
                     SidebarInlineIconButton(systemName: "arrow.clockwise") {
                         store.refresh(workspace)
                     }

@@ -91,6 +91,10 @@ struct CreateSSHSessionRequest: Identifiable {
     let preferredPresetID: UUID?
 }
 
+struct CreateSSHWorkspaceRequest: Identifiable {
+    let id = UUID()
+}
+
 struct CreateAgentSessionRequest: Identifiable {
     // TODO: Keep the request models wired while the UI entry points stay hidden behind the feature flag above.
     let id = UUID()
