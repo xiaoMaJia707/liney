@@ -588,6 +588,9 @@ struct MainWindowView: View {
                 store.createSSHSession(workspaceID: request.workspaceID, draft: draft)
             }
         }
+        .sheet(item: $store.createSSHWorkspaceRequest) { _ in
+            sshWorkspaceSheet
+        }
         .sheet(item: $store.createAgentSessionRequest) { request in
             CreateAgentSessionSheet(request: request) { draft in
                 store.createAgentSession(workspaceID: request.workspaceID, draft: draft)
@@ -667,6 +670,22 @@ struct MainWindowView: View {
         }
         .animation(.easeInOut(duration: 0.18), value: store.statusMessage?.id)
         .animation(.easeInOut(duration: 0.18), value: store.isCommandPalettePresented)
+    }
+
+    @ViewBuilder
+    private var sshWorkspaceSheet: some View {
+        CreateSSHSessionSheet(
+            request: CreateSSHSessionRequest(
+                workspaceID: UUID(),
+                workspaceName: "",
+                defaultWorkingDirectory: "",
+                remoteTargets: [],
+                presets: [],
+                preferredPresetID: nil
+            )
+        ) { draft in
+            store.addSSHWorkspace(draft: draft)
+        }
     }
 
     private func openDiffWindow() {

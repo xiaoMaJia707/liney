@@ -77,6 +77,7 @@ enum WorkspaceKind: String, Codable {
     case repository
     case localTerminal
     case remoteServer
+    case sshTerminal
 
     var displayName: String {
         switch self {
@@ -86,6 +87,8 @@ enum WorkspaceKind: String, Codable {
             return lineyLocalizedModelString("workspace.kind.localTerminal")
         case .remoteServer:
             return lineyLocalizedModelString("workspace.kind.remoteServer")
+        case .sshTerminal:
+            return lineyLocalizedModelString("workspace.kind.sshTerminal")
         }
     }
 }
@@ -373,6 +376,8 @@ struct WorkspaceSettings: Codable, Hashable {
     var remoteTargets: [RemoteWorkspaceTarget]
     var workflows: [WorkspaceWorkflow]
     var preferredWorkflowID: UUID?
+    var sshConfiguration: SSHSessionConfiguration?
+    var remoteRepositoryRoot: String?
 
     init(
         isPinned: Bool = false,
@@ -386,7 +391,9 @@ struct WorkspaceSettings: Codable, Hashable {
         preferredAgentPresetID: UUID? = AgentPreset.claudeCode.id,
         remoteTargets: [RemoteWorkspaceTarget] = [],
         workflows: [WorkspaceWorkflow] = [],
-        preferredWorkflowID: UUID? = nil
+        preferredWorkflowID: UUID? = nil,
+        sshConfiguration: SSHSessionConfiguration? = nil,
+        remoteRepositoryRoot: String? = nil
     ) {
         self.isPinned = isPinned
         self.isArchived = isArchived
@@ -400,6 +407,8 @@ struct WorkspaceSettings: Codable, Hashable {
         self.remoteTargets = remoteTargets
         self.workflows = workflows
         self.preferredWorkflowID = preferredWorkflowID
+        self.sshConfiguration = sshConfiguration
+        self.remoteRepositoryRoot = remoteRepositoryRoot
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -415,6 +424,8 @@ struct WorkspaceSettings: Codable, Hashable {
         case remoteTargets
         case workflows
         case preferredWorkflowID
+        case sshConfiguration
+        case remoteRepositoryRoot
     }
 
     init(from decoder: Decoder) throws {
@@ -431,7 +442,9 @@ struct WorkspaceSettings: Codable, Hashable {
             preferredAgentPresetID: try container.decodeIfPresent(UUID.self, forKey: .preferredAgentPresetID) ?? AgentPreset.claudeCode.id,
             remoteTargets: try container.decodeIfPresent([RemoteWorkspaceTarget].self, forKey: .remoteTargets) ?? [],
             workflows: try container.decodeIfPresent([WorkspaceWorkflow].self, forKey: .workflows) ?? [],
-            preferredWorkflowID: try container.decodeIfPresent(UUID.self, forKey: .preferredWorkflowID)
+            preferredWorkflowID: try container.decodeIfPresent(UUID.self, forKey: .preferredWorkflowID),
+            sshConfiguration: try container.decodeIfPresent(SSHSessionConfiguration.self, forKey: .sshConfiguration),
+            remoteRepositoryRoot: try container.decodeIfPresent(String.self, forKey: .remoteRepositoryRoot)
         )
     }
 }
@@ -933,6 +946,16 @@ struct RepositoryStatusSnapshot: Codable, Hashable {
     var behindCount: Int
     var localBranches: [String]
     var remoteBranches: [String]
+}
+
+struct CommitRecord: Identifiable, Hashable, Sendable {
+    let sha: String
+    let shortSha: String
+    let authorName: String
+    let date: Date
+    let subject: String
+
+    var id: String { sha }
 }
 
 struct RepositorySnapshot: Codable, Hashable {

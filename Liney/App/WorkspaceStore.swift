@@ -39,6 +39,7 @@ final class WorkspaceStore: ObservableObject {
     @Published var createWorktreeRequest: CreateWorktreeSheetRequest?
     @Published var editWorktreeNoteRequest: EditWorktreeNoteRequest?
     @Published var createSSHSessionRequest: CreateSSHSessionRequest?
+    @Published var createSSHWorkspaceRequest: CreateSSHWorkspaceRequest?
     @Published var createAgentSessionRequest: CreateAgentSessionRequest?
     @Published var createRemoteWorkspaceRequest: CreateRemoteWorkspaceRequest?
     @Published var pendingWorktreeSwitch: PendingWorktreeSwitch?
@@ -53,6 +54,7 @@ final class WorkspaceStore: ObservableObject {
     private let initialWorkspaceState: PersistedWorkspaceState?
     private let initialAppSettings: AppSettings?
     private let gitRepositoryService = GitRepositoryService()
+    private let remoteGitService = RemoteGitService()
     private let updaterController = AppUpdaterController.shared
     private let remoteSessionCoordinator = RemoteSessionCoordinator()
     private let metadataWatchService = WorkspaceMetadataWatchService.shared
@@ -553,7 +555,7 @@ final class WorkspaceStore: ObservableObject {
                     kind: .command(.toggleWorkspaceArchived(workspace.id))
                 )
             )
-            if workspace.supportsRepositoryFeatures {
+            if workspace.supportsLocalRepositoryFeatures {
                 items.append(
                     CommandPaletteItem(
                         id: "workspace-worktree:\(workspace.id.uuidString)",
@@ -675,7 +677,7 @@ final class WorkspaceStore: ObservableObject {
         selectedWorkspaceID = state.selectedWorkspaceID ?? workspaces.first?.id
 
         for workspace in workspaces {
-            if workspace.supportsRepositoryFeatures {
+            if workspace.supportsRepositoryFeatures || workspace.kind == .sshTerminal {
                 await refreshWorkspace(workspace, persistAfterRefresh: false)
             } else {
                 workspace.bootstrapIfNeeded()
@@ -1247,7 +1249,11 @@ final class WorkspaceStore: ObservableObject {
             if persistAfterRefresh { persist() }
             return
         }
-        guard workspace.supportsRepositoryFeatures else {
+        if workspace.kind == .sshTerminal {
+            await refreshSSHWorkspace(workspace, persistAfterRefresh: persistAfterRefresh)
+            return
+        }
+        guard workspace.supportsLocalRepositoryFeatures else {
             workspace.bootstrapIfNeeded()
             objectWillChange.send()
             if persistAfterRefresh {
@@ -1272,8 +1278,38 @@ final class WorkspaceStore: ObservableObject {
         }
     }
 
+    private func refreshSSHWorkspace(_ workspace: WorkspaceModel, persistAfterRefresh: Bool) async {
+        guard let sshConfig = workspace.settings.sshConfiguration,
+              let remoteDirectory = sshConfig.remoteWorkingDirectory,
+              !remoteDirectory.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else {
+            workspace.bootstrapIfNeeded()
+            objectWillChange.send()
+            if persistAfterRefresh { persist() }
+            return
+        }
+
+        do {
+            let remoteRoot = try await remoteGitService.repositoryRoot(
+                configuration: sshConfig,
+                remoteDirectory: remoteDirectory
+            )
+            let worktrees = try await remoteGitService.listWorktrees(
+                configuration: sshConfig,
+                remoteRoot: remoteRoot
+            )
+            workspace.applyRemoteWorktrees(worktrees, remoteRoot: remoteRoot)
+        } catch {
+            // Remote not a git repo or SSH failed — keep as plain terminal
+        }
+
+        workspace.bootstrapIfNeeded()
+        objectWillChange.send()
+        if persistAfterRefresh { persist() }
+    }
+
     func fetch(_ workspace: WorkspaceModel) {
-        guard workspace.supportsRepositoryFeatures else { return }
+        guard workspace.supportsLocalRepositoryFeatures else { return }
         Task { @MainActor in
             do {
                 try await gitRepositoryService.fetch(for: workspace.repositoryRoot)
@@ -1770,7 +1806,7 @@ final class WorkspaceStore: ObservableObject {
     }
 
     func presentCreateWorktree(for workspace: WorkspaceModel) {
-        guard workspace.supportsRepositoryFeatures else { return }
+        guard workspace.supportsLocalRepositoryFeatures else { return }
         createWorktreeRequest = CreateWorktreeSheetRequest(
             workspaceID: workspace.id,
             workspaceName: workspace.name,
@@ -1790,6 +1826,23 @@ final class WorkspaceStore: ObservableObject {
             presets: appSettings.sshPresets,
             preferredPresetID: nil
         )
+    }
+
+    func presentCreateSSHWorkspace() {
+        createSSHWorkspaceRequest = CreateSSHWorkspaceRequest()
+    }
+
+    func addSSHWorkspace(draft: CreateSSHSessionDraft) {
+        guard let configuration = draft.configuration else { return }
+        let workspace = WorkspaceModel(sshConfiguration: configuration)
+        workspaces.append(workspace)
+        selectedWorkspaceID = workspace.id
+        persist()
+        
+        // Refresh to fetch remote worktree list
+        Task { @MainActor in
+            await refreshSSHWorkspace(workspace, persistAfterRefresh: true)
+        }
     }
 
     func presentCreateAgentSession(for workspace: WorkspaceModel) {
@@ -2321,12 +2374,12 @@ final class WorkspaceStore: ObservableObject {
     }
 
     func requestWorktreeRemoval(_ worktree: WorktreeModel, in workspace: WorkspaceModel) {
-        guard workspace.supportsRepositoryFeatures else { return }
+        guard workspace.supportsLocalRepositoryFeatures else { return }
         requestWorktreeRemoval([worktree], in: workspace)
     }
 
     func requestWorktreeRemoval(_ worktrees: [WorktreeModel], in workspace: WorkspaceModel) {
-        guard workspace.supportsRepositoryFeatures else { return }
+        guard workspace.supportsLocalRepositoryFeatures else { return }
         let uniqueWorktrees = Dictionary(uniqueKeysWithValues: worktrees.map { ($0.path, $0) }).values.sorted { $0.path < $1.path }
         guard !uniqueWorktrees.isEmpty else { return }
 
@@ -2359,7 +2412,7 @@ final class WorkspaceStore: ObservableObject {
     }
 
     func requestWorktreeRemoval(paths: [String], in workspace: WorkspaceModel) {
-        guard workspace.supportsRepositoryFeatures else { return }
+        guard workspace.supportsLocalRepositoryFeatures else { return }
         let worktrees = workspace.worktrees.filter { paths.contains($0.path) }
         requestWorktreeRemoval(worktrees, in: workspace)
     }
@@ -2877,6 +2930,25 @@ final class WorkspaceStore: ObservableObject {
     }
 
     private func openWorkspace(_ workspace: WorkspaceModel, in preferredEditor: ExternalEditor) {
+        if workspace.kind == .sshTerminal, let sshConfig = workspace.settings.sshConfiguration {
+            var config = sshConfig
+            if workspace.worktrees.count > 1 {
+                config.remoteWorkingDirectory = workspace.activeWorktreePath
+            }
+            ExternalEditorCatalog.openSSHRemote(sshConfiguration: config) { [weak self] result in
+                guard let self else { return }
+                guard case .failure(let error) = result else { return }
+                self.receive(
+                    .statusMessage(
+                        self.localizedFormat("main.status.externalEditor.openFailedFormat", workspace.name, "VS Code", error.localizedDescription),
+                        .warning,
+                        deliverSystemNotification: false
+                    )
+                )
+            }
+            return
+        }
+
         let availableEditors = availableExternalEditors
         guard let editor = ExternalEditorCatalog.effectiveEditor(
             preferred: preferredEditor,

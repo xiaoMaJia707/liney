@@ -74,7 +74,7 @@ final class WorkspaceModel: ObservableObject, Identifiable {
         self.worktreeControllers = [record.activeWorktreePath: [activeTab.id: activeController]]
         self.sessionController = activeController
         self.zoomedPaneID = activeTab.zoomedPaneID
-        if record.kind == .localTerminal {
+        if record.kind == .localTerminal || record.kind == .sshTerminal {
             currentBranch = "local"
             head = "shell"
             worktrees = [
@@ -150,8 +150,69 @@ final class WorkspaceModel: ObservableObject, Identifiable {
         ]
     }
 
+    convenience init(sshConfiguration: SSHSessionConfiguration, name: String? = nil) {
+        let placeholderPath = NSHomeDirectory()
+        let workspaceName = name ?? sshConfiguration.destination
+        let initialPane = PaneSnapshot(
+            id: UUID(),
+            preferredWorkingDirectory: placeholderPath,
+            preferredEngine: .libghosttyPreferred,
+            backendConfiguration: .ssh(sshConfiguration)
+        )
+        self.init(
+            record: WorkspaceRecord(
+                id: UUID(),
+                kind: .sshTerminal,
+                name: workspaceName,
+                repositoryRoot: placeholderPath,
+                activeWorktreePath: placeholderPath,
+                worktreeStates: [
+                    WorktreeSessionStateRecord(
+                        worktreePath: placeholderPath,
+                        layout: .pane(PaneLeaf(paneID: initialPane.id)),
+                        panes: [initialPane],
+                        focusedPaneID: initialPane.id
+                    )
+                ],
+                isSidebarExpanded: false,
+                settings: WorkspaceSettings(sshConfiguration: sshConfiguration),
+                activityLog: []
+            )
+        )
+        currentBranch = "ssh"
+        head = sshConfiguration.destination
+        localBranches = []
+        remoteBranches = []
+        worktrees = [
+            WorktreeModel(
+                path: placeholderPath,
+                branch: "ssh",
+                head: sshConfiguration.destination,
+                isMainWorktree: true,
+                isLocked: false,
+                lockReason: nil
+            )
+        ]
+    }
+
     var supportsRepositoryFeatures: Bool {
-        kind == .repository || kind == .remoteServer
+        kind == .repository || kind == .remoteServer || (kind == .sshTerminal && worktrees.count > 1)
+    }
+
+    var supportsLocalRepositoryFeatures: Bool {
+        kind == .repository
+    }
+
+    var defaultPaneBackendConfiguration: SessionBackendConfiguration {
+        if kind == .sshTerminal, let sshConfig = settings.sshConfiguration {
+            if worktrees.count > 1 {
+                var config = sshConfig
+                config.remoteWorkingDirectory = activeWorktreePath
+                return .ssh(config)
+            }
+            return .ssh(sshConfig)
+        }
+        return .local()
     }
 
     var activeWorktree: WorktreeModel? {
@@ -287,7 +348,7 @@ final class WorkspaceModel: ObservableObject, Identifiable {
     }
 
     func apply(snapshot: RepositorySnapshot) {
-        guard supportsRepositoryFeatures else { return }
+        guard kind == .repository else { return }
         saveActiveWorktreeState()
         let previousActiveWorktreePath = activeWorktreePath
         currentBranch = snapshot.currentBranch
@@ -310,6 +371,22 @@ final class WorkspaceModel: ObservableObject, Identifiable {
         }
     }
 
+    func applyRemoteWorktrees(_ remoteWorktrees: [WorktreeModel], remoteRoot: String) {
+        guard kind == .sshTerminal else { return }
+        saveActiveWorktreeState()
+        let previousActiveWorktreePath = activeWorktreePath
+        worktrees = remoteWorktrees
+        settings.remoteRepositoryRoot = remoteRoot
+        if !remoteWorktrees.contains(where: { $0.path == activeWorktreePath }) {
+            activeWorktreePath = remoteRoot
+        }
+        ensureKnownWorktreeStates()
+        pruneWorktreeCustomizations()
+        if previousActiveWorktreePath != activeWorktreePath || layout == nil {
+            loadActiveWorktreeState()
+        }
+    }
+
     func createPane(splitAxis: PaneSplitAxis?, snapshot: PaneSnapshot? = nil) {
         createPane(splitAxis: splitAxis, snapshot: snapshot, placement: .after)
     }
@@ -317,6 +394,14 @@ final class WorkspaceModel: ObservableObject, Identifiable {
     func createPane(splitAxis: PaneSplitAxis?, snapshot: PaneSnapshot? = nil, placement: PaneSplitPlacement) {
         let targetPane = sessionController.focusedPaneID ?? layout?.firstPaneID
         let defaultSnapshot: PaneSnapshot = {
+            if kind == .sshTerminal {
+                return PaneSnapshot(
+                    id: UUID(),
+                    preferredWorkingDirectory: activeWorktreePath,
+                    preferredEngine: .libghosttyPreferred,
+                    backendConfiguration: defaultPaneBackendConfiguration
+                )
+            }
             var s = PaneSnapshot.makeDefault(cwd: activeWorktreePath)
             if let sshConfig = sshTarget {
                 s.backendConfiguration = .ssh(sshConfig)
@@ -588,9 +673,17 @@ final class WorkspaceModel: ObservableObject, Identifiable {
         saveActiveWorktreeState()
         var state = activeWorktreeState
         let newIndex = state.tabs.count + 1
-        let newTab = WorkspaceTabStateRecord.makeDefault(
-            for: activeWorktreePath,
-            title: "Tab \(newIndex)"
+        let initialPane = PaneSnapshot(
+            id: UUID(),
+            preferredWorkingDirectory: activeWorktreePath,
+            preferredEngine: .libghosttyPreferred,
+            backendConfiguration: defaultPaneBackendConfiguration
+        )
+        let newTab = WorkspaceTabStateRecord(
+            title: "Tab \(newIndex)",
+            layout: .pane(PaneLeaf(paneID: initialPane.id)),
+            panes: [initialPane],
+            focusedPaneID: initialPane.id
         )
         state.upsertTab(newTab, selecting: true)
         worktreeStates[activeWorktreePath] = state
@@ -716,7 +809,13 @@ final class WorkspaceModel: ObservableObject, Identifiable {
 
     func closeAllPanes() {
         sessionController.sessions.keys.forEach { sessionController.closePane($0) }
-        let initialPane = sessionController.createPane(defaultWorkingDirectory: activeWorktreePath)
+        let snapshot = PaneSnapshot(
+            id: UUID(),
+            preferredWorkingDirectory: activeWorktreePath,
+            preferredEngine: .libghosttyPreferred,
+            backendConfiguration: defaultPaneBackendConfiguration
+        )
+        let initialPane = sessionController.createPane(from: snapshot)
         layout = .pane(PaneLeaf(paneID: initialPane))
         zoomedPaneID = nil
         sessionController.sync(with: [initialPane], defaultWorkingDirectory: activeWorktreePath)
@@ -806,10 +905,21 @@ final class WorkspaceModel: ObservableObject, Identifiable {
         sessionController = controller
         zoomedPaneID = tab.zoomedPaneID
         if layout == nil {
-            var initialSnapshot = PaneSnapshot.makeDefault(cwd: activeWorktreePath)
-            if let sshConfig = sshTarget {
-                initialSnapshot.backendConfiguration = .ssh(sshConfig)
-            }
+            let initialSnapshot: PaneSnapshot = {
+                if kind == .sshTerminal {
+                    return PaneSnapshot(
+                        id: UUID(),
+                        preferredWorkingDirectory: activeWorktreePath,
+                        preferredEngine: .libghosttyPreferred,
+                        backendConfiguration: defaultPaneBackendConfiguration
+                    )
+                }
+                var s = PaneSnapshot.makeDefault(cwd: activeWorktreePath)
+                if let sshConfig = sshTarget {
+                    s.backendConfiguration = .ssh(sshConfig)
+                }
+                return s
+            }()
             let initialPane = controller.createPane(from: initialSnapshot)
             layout = .pane(PaneLeaf(paneID: initialPane))
         }
@@ -822,7 +932,24 @@ final class WorkspaceModel: ObservableObject, Identifiable {
 
     private func ensureActiveWorktreeState() {
         if worktreeStates[activeWorktreePath] == nil {
-            worktreeStates[activeWorktreePath] = WorktreeSessionStateRecord.makeDefault(for: activeWorktreePath)
+            if kind == .sshTerminal, let sshConfig = settings.sshConfiguration {
+                var config = sshConfig
+                config.remoteWorkingDirectory = activeWorktreePath
+                let initialPane = PaneSnapshot(
+                    id: UUID(),
+                    preferredWorkingDirectory: activeWorktreePath,
+                    preferredEngine: .libghosttyPreferred,
+                    backendConfiguration: .ssh(config)
+                )
+                worktreeStates[activeWorktreePath] = WorktreeSessionStateRecord(
+                    worktreePath: activeWorktreePath,
+                    layout: .pane(PaneLeaf(paneID: initialPane.id)),
+                    panes: [initialPane],
+                    focusedPaneID: initialPane.id
+                )
+            } else {
+                worktreeStates[activeWorktreePath] = WorktreeSessionStateRecord.makeDefault(for: activeWorktreePath)
+            }
         }
         worktreeStates[activeWorktreePath]?.ensureTabs()
     }
@@ -830,7 +957,24 @@ final class WorkspaceModel: ObservableObject, Identifiable {
     func ensureKnownWorktreeStates() {
         for worktree in worktrees {
             if worktreeStates[worktree.path] == nil {
-                worktreeStates[worktree.path] = WorktreeSessionStateRecord.makeDefault(for: worktree.path)
+                if kind == .sshTerminal, let sshConfig = settings.sshConfiguration {
+                    var config = sshConfig
+                    config.remoteWorkingDirectory = worktree.path
+                    let initialPane = PaneSnapshot(
+                        id: UUID(),
+                        preferredWorkingDirectory: worktree.path,
+                        preferredEngine: .libghosttyPreferred,
+                        backendConfiguration: .ssh(config)
+                    )
+                    worktreeStates[worktree.path] = WorktreeSessionStateRecord(
+                        worktreePath: worktree.path,
+                        layout: .pane(PaneLeaf(paneID: initialPane.id)),
+                        panes: [initialPane],
+                        focusedPaneID: initialPane.id
+                    )
+                } else {
+                    worktreeStates[worktree.path] = WorktreeSessionStateRecord.makeDefault(for: worktree.path)
+                }
             }
             worktreeStates[worktree.path]?.ensureTabs()
         }

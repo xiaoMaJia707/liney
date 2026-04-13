@@ -112,7 +112,12 @@ struct CreateSSHSessionSheet: View {
                     TextField(localized("sheet.ssh.user"), text: $draft.user)
                     TextField(localized("sheet.ssh.port"), text: $draft.port)
                     TextField(localized("sheet.ssh.identityFile"), text: $draft.identityFilePath)
-                    TextField(localized("sheet.ssh.remoteWorkingDirectory"), text: $draft.remoteWorkingDirectory)
+                    VStack(alignment: .leading, spacing: 4) {
+                        TextField(localized("sheet.ssh.remoteWorkingDirectory"), text: $draft.remoteWorkingDirectory)
+                        Text("Supports ~ for home directory (e.g. ~/project or /absolute/path)")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 .textFieldStyle(.roundedBorder)
                 .padding(.top, 8)
