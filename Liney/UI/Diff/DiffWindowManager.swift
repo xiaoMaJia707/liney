@@ -7,6 +7,7 @@
 
 import AppKit
 import SwiftUI
+import WebKit
 
 @MainActor
 final class DiffWindowManager: NSObject, NSWindowDelegate {
@@ -42,7 +43,7 @@ final class DiffWindowManager: NSObject, NSWindowDelegate {
         newWindow.styleMask = [.titled, .closable, .miniaturizable, .resizable]
         newWindow.tabbingMode = .preferred
         newWindow.tabbingIdentifier = LineyDesktopApplication.sharedWindowTabbingIdentifier
-        newWindow.toolbarStyle = .unified
+        newWindow.toolbarStyle = .unifiedCompact
         newWindow.isReleasedWhenClosed = false
         newWindow.minSize = NSSize(width: 760, height: 520)
         newWindow.setFrameAutosaveName("LineyDiffWindow")
@@ -76,16 +77,60 @@ final class DiffWindowManager: NSObject, NSWindowDelegate {
         }
     }
 
+    func applyZoom(_ level: Double) {
+        guard let window else { return }
+        findWKWebViews(in: window.contentView).forEach { webView in
+            webView.pageZoom = level
+        }
+    }
+
+    private func adjustZoom(by delta: Double) {
+        let current = UserDefaults.standard.double(forKey: "liney.diff.zoom")
+        let currentLevel = current == 0 ? 1.0 : current
+        let newLevel = min(3.0, max(0.5, currentLevel + delta))
+        setZoom(newLevel)
+    }
+
+    private func setZoom(_ level: Double) {
+        UserDefaults.standard.set(level, forKey: "liney.diff.zoom")
+        applyZoom(level)
+    }
+
+    private func findWKWebViews(in view: NSView?) -> [WKWebView] {
+        guard let view else { return [] }
+        var results: [WKWebView] = []
+        if let webView = view as? WKWebView {
+            results.append(webView)
+        }
+        for subview in view.subviews {
+            results.append(contentsOf: findWKWebViews(in: subview))
+        }
+        return results
+    }
+
     private func installWindowEventMonitor() {
         guard localEventMonitor == nil else { return }
         localEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self, let window = self.window, window == event.window else { return event }
-            if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
-               event.charactersIgnoringModifiers == "w" {
+            let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            guard flags == .command else { return event }
+
+            switch event.charactersIgnoringModifiers {
+            case "w":
                 window.performClose(nil)
                 return nil
+            case "+", "=":
+                self.adjustZoom(by: 0.1)
+                return nil
+            case "-":
+                self.adjustZoom(by: -0.1)
+                return nil
+            case "0":
+                self.setZoom(1.0)
+                return nil
+            default:
+                return event
             }
-            return event
         }
     }
 

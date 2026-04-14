@@ -18,6 +18,7 @@ struct DiffWindowContentView: View {
     @State private var columnVisibility: NavigationSplitViewVisibility = .automatic
     @State private var listSelection: String?
     @AppStorage("liney.diff.viewStyle") private var diffStyleRaw = DiffPresentationStyle.split.rawValue
+    @AppStorage("liney.diff.zoom") private var zoomLevel: Double = 1.0
 
     private var diffStyle: DiffPresentationStyle {
         DiffPresentationStyle(rawValue: diffStyleRaw) ?? .split
@@ -65,6 +66,36 @@ struct DiffWindowContentView: View {
                 .pickerStyle(.segmented)
                 .frame(width: 110)
                 .help("Diff Style")
+            }
+
+            ToolbarItem(placement: .primaryAction) {
+                HStack(spacing: 4) {
+                    Button {
+                        zoomLevel = max(0.5, zoomLevel - 0.1)
+                        applyZoom()
+                    } label: {
+                        Image(systemName: "minus.magnifyingglass")
+                    }
+                    .help("Zoom Out (⌘-)")
+
+                    Button {
+                        zoomLevel = 1.0
+                        applyZoom()
+                    } label: {
+                        Text("\(Int(zoomLevel * 100))%")
+                            .font(.system(size: 11, weight: .medium, design: .monospaced))
+                            .frame(minWidth: 36)
+                    }
+                    .help("Reset Zoom (⌘0)")
+
+                    Button {
+                        zoomLevel = min(3.0, zoomLevel + 0.1)
+                        applyZoom()
+                    } label: {
+                        Image(systemName: "plus.magnifyingglass")
+                    }
+                    .help("Zoom In (⌘+)")
+                }
             }
 
             ToolbarItem(placement: .primaryAction) {
@@ -134,12 +165,26 @@ struct DiffWindowContentView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(LineyTheme.appBackground)
+        .onAppear {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                applyZoom()
+            }
+        }
+        .onChange(of: state.document?.file.id) { _, _ in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                applyZoom()
+            }
+        }
     }
 
     private func toggleSidebar() {
         withAnimation(.easeInOut(duration: 0.15)) {
             columnVisibility = columnVisibility == .detailOnly ? .automatic : .detailOnly
         }
+    }
+
+    private func applyZoom() {
+        DiffWindowManager.shared.applyZoom(zoomLevel)
     }
 }
 
