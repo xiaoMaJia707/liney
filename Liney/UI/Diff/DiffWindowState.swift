@@ -193,12 +193,21 @@ final class DiffWindowState: ObservableObject {
         }
     }
 
+    private static let maxPatchBytes = 1_000_000
+
     nonisolated private static func loadDocument(for file: DiffChangedFile, worktreePath: String) async throws -> DiffFileDocument {
         let start = DiffDiagnostics.now()
         let unifiedPatch = try await loadUnifiedPatch(for: file, worktreePath: worktreePath)
+        let patchSize = unifiedPatch.utf8.count
         DiffDiagnostics.log(
-            "Completed document assembly for \(file.displayPath) in \(DiffDiagnostics.formatMilliseconds(DiffDiagnostics.elapsedMilliseconds(since: start))) [patch=\(unifiedPatch.utf8.count)B]"
+            "Completed document assembly for \(file.displayPath) in \(DiffDiagnostics.formatMilliseconds(DiffDiagnostics.elapsedMilliseconds(since: start))) [patch=\(patchSize)B]"
         )
+
+        if patchSize > maxPatchBytes {
+            DiffDiagnostics.log("Patch too large for \(file.displayPath): \(patchSize)B exceeds limit \(maxPatchBytes)B")
+            let truncatedPatch = truncatePatch(unifiedPatch, maxBytes: maxPatchBytes)
+            return makeDocument(file: file, unifiedPatch: truncatedPatch)
+        }
 
         return makeDocument(file: file, unifiedPatch: unifiedPatch)
     }
@@ -242,6 +251,8 @@ final class DiffWindowState: ObservableObject {
         )
     }
 
+    private static let maxFileReadBytes = 1_000_000
+
     nonisolated private static func readFile(at url: URL) -> String {
         let start = DiffDiagnostics.now()
         guard let data = try? Data(contentsOf: url) else {
@@ -253,6 +264,16 @@ final class DiffWindowState: ObservableObject {
                 "Read binary file \(url.path) in \(DiffDiagnostics.formatMilliseconds(DiffDiagnostics.elapsedMilliseconds(since: start))) [\(data.count)B]"
             )
             return "<<Binary file>>"
+        }
+        if data.count > maxFileReadBytes {
+            DiffDiagnostics.log(
+                "File too large for inline diff \(url.path) [\(data.count)B exceeds \(maxFileReadBytes)B limit]"
+            )
+            let truncatedData = data.prefix(maxFileReadBytes)
+            let partial = String(decoding: truncatedData, as: UTF8.self)
+            let totalLines = data.split(separator: UInt8(ascii: "\n"), omittingEmptySubsequences: false).count
+            let keptLines = DiffDiagnostics.lineCount(in: partial)
+            return partial + "\n\n… \(totalLines - keptLines) additional lines omitted (file too large, \(data.count / 1024)KB)"
         }
         if let string = String(data: data, encoding: .utf8) {
             DiffDiagnostics.log(
@@ -304,6 +325,31 @@ final class DiffWindowState: ObservableObject {
         let oldStart = oldPrefixCount == 0 ? 0 : 1
         let newStart = newPrefixCount == 0 ? 0 : 1
         return "@@ -\(oldStart),\(oldPrefixCount) +\(newStart),\(newPrefixCount) @@\n\(body)"
+    }
+
+    nonisolated private static func truncatePatch(_ patch: String, maxBytes: Int) -> String {
+        let lines = patch.components(separatedBy: "\n")
+        var result: [String] = []
+        var currentBytes = 0
+
+        for line in lines {
+            let lineBytes = line.utf8.count + 1
+            if currentBytes + lineBytes > maxBytes {
+                break
+            }
+            result.append(line)
+            currentBytes += lineBytes
+        }
+
+        let totalLines = DiffDiagnostics.lineCount(in: patch)
+        let keptLines = result.count
+        let omitted = totalLines - keptLines
+        if omitted > 0 {
+            result.append(" ")
+            result.append(" … \(omitted) additional lines omitted (file too large)")
+        }
+
+        return result.joined(separator: "\n")
     }
 
     nonisolated private static func lineCount(in text: String) -> Int {
